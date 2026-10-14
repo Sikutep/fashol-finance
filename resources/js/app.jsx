@@ -2,7 +2,7 @@ import './bootstrap';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { LoadingProvider } from './context/LoadingContext';
-import LoadingShowcase from './components/LoadingShowcase';
+import FinanceApp from './components/FinanceApp';
 
 const rootElement = document.getElementById('root') || document.getElementById('app');
 
@@ -10,7 +10,7 @@ if (rootElement) {
   createRoot(rootElement).render(
     <React.StrictMode>
       <LoadingProvider>
-        <LoadingShowcase />
+        <FinanceApp />
       </LoadingProvider>
     </React.StrictMode>
   );
@@ -18,4 +18,4 @@ if (rootElement) {
 
 export { LoadingProvider, useLoading } from './context/LoadingContext';
 export { default as LoadingModal } from './components/LoadingModal';
-export { default as LoadingShowcase } from './components/LoadingShowcase';
+export { default as FinanceApp } from './components/FinanceApp';

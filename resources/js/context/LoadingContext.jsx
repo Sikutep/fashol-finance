@@ -34,6 +34,23 @@ export function LoadingProvider({ children }) {
     });
   }, []);
 
+  // Transition to success state and auto close
+  const showSuccess = useCallback((options = {}) => {
+    setModalState(prev => ({
+      ...prev,
+      isOpen: true,
+      status: 'success',
+      title: options.title || 'Berhasil!',
+      subtitle: options.subtitle || 'Data berhasil diproses dan disimpan.',
+      progress: 100,
+    }));
+
+    setTimeout(() => {
+      hideLoading();
+      if (options.onComplete) options.onComplete();
+    }, options.duration || 850);
+  }, [hideLoading]);
+
   // Timed Loading helper (e.g. 2.5s simulated loading)
   const showTimedLoading = useCallback((options = {}) => {
     const duration = options.duration || 2500;
@@ -51,15 +68,24 @@ export function LoadingProvider({ children }) {
         setModalState(prev => ({
           ...prev,
           status: 'success',
-          title: options.successTitle || 'Berhasil Diproses!',
-          subtitle: options.successSubtitle || 'Data transaksi telah berhasil diverifikasi dan disimpan.',
+          title: options.successTitle || 'Berhasil!',
+          subtitle: options.successSubtitle || 'Data berhasil diproses dan disimpan.',
           progress: 100,
         }));
+
+        // Execute onComplete callback
+        if (options.onComplete) options.onComplete();
+
+        // Auto close after brief 800ms success presentation - NO Lanjutkan button!
+        setTimeout(() => {
+          hideLoading();
+        }, 850);
       } else {
         hideLoading();
+        if (options.onComplete) options.onComplete();
       }
-      if (options.onComplete) options.onComplete();
     }, duration);
+
 
     return () => clearTimeout(timer);
   }, [showLoading, hideLoading]);
@@ -128,6 +154,7 @@ export function LoadingProvider({ children }) {
     <LoadingContext.Provider
       value={{
         showLoading,
+        showSuccess,
         hideLoading,
         showTimedLoading,
         showMultiStepLoading,

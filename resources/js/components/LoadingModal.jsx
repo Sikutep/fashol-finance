@@ -1,31 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { 
-  Loader2, 
   CheckCircle2, 
   AlertCircle, 
   ShieldCheck, 
   CreditCard, 
   Sparkles, 
   RefreshCw, 
-  X,
-  ArrowRight
+  X
 } from 'lucide-react';
 
 /**
  * LoadingModal Component
  * An animated, glassmorphic loading pop-up designed for modern web applications.
  * 
- * Props:
- * - isOpen: boolean
- * - title: string
- * - subtitle: string
- * - status: 'loading' | 'success' | 'error'
- * - progress: number (0-100) or null for indeterminate
- * - steps: Array<{ label: string, done: boolean }>
- * - currentStepIndex: number
- * - canClose: boolean
- * - onClose: () => void
- * - type: 'finance' | 'simple' | 'steps' | 'glow'
+ * Auto-closes on success without requiring a "Lanjutkan" button.
+ * Only displays a button on error / validation requirements.
  */
 export default function LoadingModal({
   isOpen = false,
@@ -64,21 +53,21 @@ export default function LoadingModal({
         onClick={canClose ? onClose : undefined}
       />
 
-      {/* Pop-up Container */}
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200/80 dark:border-slate-800/80 p-6 md:p-8 text-center z-10 transform transition-all duration-300 animate-scaleUp">
+      {/* Pop-up Container (Comfortable Size & Readable Typography) */}
+      <div className="relative w-full max-w-lg overflow-hidden rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200/80 dark:border-slate-800/80 p-8 sm:p-10 text-center z-10 transform transition-all duration-300 animate-scaleUp">
         
         {/* Subtle decorative glowing background accents */}
-        <div className="absolute -top-12 -right-12 w-36 h-36 bg-emerald-500/15 rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-12 -left-12 w-36 h-36 bg-blue-500/15 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute -top-12 -right-12 w-44 h-44 bg-emerald-500/15 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute -bottom-12 -left-12 w-44 h-44 bg-blue-500/15 rounded-full blur-2xl pointer-events-none" />
 
-        {/* Close button if dismissible */}
-        {canClose && (
+        {/* Close button if dismissible or on error */}
+        {(canClose || status === 'error') && (
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"
             title="Tutup"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         )}
 
@@ -89,44 +78,44 @@ export default function LoadingModal({
             {status === 'loading' && (
               <>
                 {/* Outer rotating pulse ring */}
-                <div className="w-24 h-24 rounded-full border-2 border-emerald-500/20 dark:border-emerald-400/20 animate-ping absolute inset-0 m-auto" />
+                <div className="w-28 h-28 rounded-full border-2 border-emerald-500/20 dark:border-emerald-400/20 animate-ping absolute inset-0 m-auto" />
                 
                 {/* Secondary gradient spinner */}
-                <div className="w-20 h-20 rounded-full border-4 border-transparent border-t-emerald-500 border-r-teal-400 border-b-cyan-500 animate-spin" />
+                <div className="w-24 h-24 rounded-full border-4 border-transparent border-t-emerald-500 border-r-teal-400 border-b-cyan-500 animate-spin" />
                 
                 {/* Inner floating emblem with finance icon */}
-                <div className="absolute w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center shadow-inner text-emerald-600 dark:text-emerald-400">
+                <div className="absolute w-14 h-14 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center shadow-inner text-emerald-600 dark:text-emerald-400">
                   {type === 'finance' ? (
-                    <CreditCard className="w-6 h-6 animate-pulse" />
+                    <CreditCard className="w-7 h-7 animate-pulse" />
                   ) : type === 'steps' ? (
-                    <RefreshCw className="w-5 h-5 animate-spin text-teal-600 dark:text-teal-400" />
+                    <RefreshCw className="w-6 h-6 animate-spin text-teal-600 dark:text-teal-400" />
                   ) : (
-                    <Sparkles className="w-5 h-5 animate-bounce text-emerald-500" />
+                    <Sparkles className="w-6 h-6 animate-bounce text-emerald-500" />
                   )}
                 </div>
               </>
             )}
 
             {status === 'success' && (
-              <div className="w-20 h-20 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 border-2 border-emerald-500 flex items-center justify-center text-emerald-500 shadow-lg shadow-emerald-500/20 animate-bounce">
-                <CheckCircle2 className="w-10 h-10" />
+              <div className="w-24 h-24 rounded-full bg-emerald-500/15 dark:bg-emerald-500/20 border-2 border-emerald-500 flex items-center justify-center text-emerald-600 shadow-xl shadow-emerald-500/20 animate-bounce">
+                <CheckCircle2 className="w-14 h-14" />
               </div>
             )}
 
             {status === 'error' && (
-              <div className="w-20 h-20 rounded-full bg-rose-500/10 dark:bg-rose-500/20 border-2 border-rose-500 flex items-center justify-center text-rose-500 shadow-lg shadow-rose-500/20 animate-shake">
-                <AlertCircle className="w-10 h-10" />
+              <div className="w-24 h-24 rounded-full bg-rose-500/15 dark:bg-rose-500/20 border-2 border-rose-500 flex items-center justify-center text-rose-600 shadow-xl shadow-rose-500/20 animate-shake">
+                <AlertCircle className="w-14 h-14" />
               </div>
             )}
           </div>
         </div>
 
         {/* Content Section */}
-        <h3 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white mb-2">
+        <h3 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white mb-2">
           {title}
         </h3>
 
-        <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-5 min-h-[2.5rem] flex items-center justify-center">
+        <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed mb-6 min-h-[2.5rem] flex items-center justify-center">
           <span>{subtitle}{status === 'loading' ? dots : ''}</span>
         </p>
 
@@ -135,9 +124,9 @@ export default function LoadingModal({
           <div className="w-full mb-6">
             <div className="flex justify-between items-center text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5">
               <span>Kemajuan</span>
-              <span className="text-emerald-600 dark:text-emerald-400 font-mono">{Math.round(progress)}%</span>
+              <span className="text-emerald-600 dark:text-emerald-400 font-mono text-sm">{Math.round(progress)}%</span>
             </div>
-            <div className="w-full bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden p-0.5 border border-slate-200/50 dark:border-slate-700/50">
+            <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden p-0.5 border border-slate-200/50 dark:border-slate-700/50">
               <div 
                 className="bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 h-full rounded-full transition-all duration-300 shadow-sm shadow-emerald-500/30"
                 style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
@@ -147,70 +136,38 @@ export default function LoadingModal({
         ) : status === 'loading' ? (
           /* Indeterminate loading bar shimmer */
           <div className="w-full mb-6">
-            <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden relative">
+            <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden relative">
               <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 w-1/3 rounded-full animate-indeterminate" />
             </div>
           </div>
         ) : null}
 
-        {/* Multi-step progress list (optional) */}
-        {steps && steps.length > 0 && (
-          <div className="mb-6 bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3.5 border border-slate-200/60 dark:border-slate-800 text-left space-y-2">
-            {steps.map((step, idx) => {
-              const isCurrent = idx === currentStepIndex && status === 'loading';
-              const isDone = idx < currentStepIndex || step.done;
-              return (
-                <div 
-                  key={idx} 
-                  className={`flex items-center gap-2.5 text-xs transition-colors duration-200 ${
-                    isDone 
-                      ? 'text-emerald-600 dark:text-emerald-400 font-medium' 
-                      : isCurrent 
-                        ? 'text-slate-900 dark:text-slate-100 font-semibold' 
-                        : 'text-slate-400 dark:text-slate-500'
-                  }`}
-                >
-                  {isDone ? (
-                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
-                  ) : isCurrent ? (
-                    <Loader2 className="w-4 h-4 shrink-0 animate-spin text-teal-500" />
-                  ) : (
-                    <div className="w-4 h-4 shrink-0 rounded-full border border-slate-300 dark:border-slate-700 flex items-center justify-center text-[10px]">
-                      {idx + 1}
-                    </div>
-                  )}
-                  <span className="truncate">{step.label}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Footer info badge or action button */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-center">
+        {/* Footer info badge OR Error button (Notice: NO 'Lanjutkan' button for success!) */}
+        <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-center">
           {status === 'loading' ? (
-            <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Dilindungi dengan enkripsi 256-bit Fashol</span>
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-400 dark:text-slate-500 font-medium">
+              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+              <span>Dilindungi dengan enkripsi 256-bit ERP Fashol</span>
+            </div>
+          ) : status === 'success' ? (
+            <div className="flex items-center gap-2 text-sm text-emerald-600 font-semibold animate-pulse">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Transaksi berhasil diverifikasi</span>
             </div>
           ) : (
+            /* Only show button on error / validation notice! */
             <button
               onClick={onClose}
-              className={`w-full py-2.5 px-4 rounded-xl font-semibold text-sm transition-all shadow-md flex items-center justify-center gap-2 ${
-                status === 'success'
-                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/25'
-                  : 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90'
-              }`}
+              className="w-full py-3 px-5 rounded-xl font-bold text-sm bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-500/20 transition-all flex items-center justify-center gap-2"
             >
-              <span>{status === 'success' ? 'Lanjutkan' : 'Tutup'}</span>
-              <ArrowRight className="w-4 h-4" />
+              <span>Perbaiki / Tutup Notifikasi</span>
             </button>
           )}
         </div>
 
       </div>
 
-      {/* Embedded CSS Animations for smooth entrance */}
+      {/* Embedded CSS Animations */}
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; }
