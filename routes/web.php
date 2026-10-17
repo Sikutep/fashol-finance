@@ -12,7 +12,7 @@ use App\Http\Controllers\FinanceExtendedController;
 Route::prefix('api')->group(function () {
     // Public Auth endpoints
     Route::get('/auth/me', [AuthController::class, 'me']);
-    Route::post('/auth/login', [AuthController::class, 'login']);
+    Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
     // Protected Operational Endpoints (Requires Authenticated Session)
@@ -23,6 +23,7 @@ Route::prefix('api')->group(function () {
         // Master Pekerja (Modul 1)
         Route::get('/workers', [WorkerController::class, 'index']);
         Route::post('/workers', [WorkerController::class, 'store']);
+        Route::post('/workers/sync-users', [WorkerController::class, 'syncUsers']);
         Route::put('/workers/{id}', [WorkerController::class, 'update']);
         Route::delete('/workers/{id}', [WorkerController::class, 'destroy']);
 
@@ -35,6 +36,12 @@ Route::prefix('api')->group(function () {
         Route::get('/references/options', [ReferenceController::class, 'getOptions']);
         Route::get('/references/rate', [ReferenceController::class, 'getRate']);
 
+        // Master Proses Pekerjaan & Tarif (Modul 1 & 6)
+        Route::get('/master-proses', [ReferenceController::class, 'getProcessRates']);
+        Route::post('/master-proses', [ReferenceController::class, 'storeProcessRate']);
+        Route::put('/master-proses/{id}', [ReferenceController::class, 'updateProcessRate']);
+        Route::delete('/master-proses/{id}', [ReferenceController::class, 'destroyProcessRate']);
+
         // Extended Finance Modules
         Route::get('/payroll-mingguan', [FinanceExtendedController::class, 'getWeeklyPayroll']);
         Route::post('/payroll-mingguan/status', [FinanceExtendedController::class, 'updateWeeklyPayrollStatus']);
@@ -44,9 +51,14 @@ Route::prefix('api')->group(function () {
 
         Route::get('/hpp-produk', [FinanceExtendedController::class, 'getHppProducts']);
         Route::post('/hpp-produk/status', [FinanceExtendedController::class, 'updateHppStatus']);
+        Route::put('/hpp-produk/{id}', [FinanceExtendedController::class, 'updateHppItem']);
+        Route::post('/hpp-produk/{id}', [FinanceExtendedController::class, 'updateHppItem']);
 
         Route::get('/keuangan', [FinanceExtendedController::class, 'getFinanceTransactions']);
         Route::post('/keuangan', [FinanceExtendedController::class, 'storeFinanceTransaction']);
+        Route::get('/finance-categories', [FinanceExtendedController::class, 'getFinanceCategories']);
+
+        Route::get('/laporan-laba-rugi', [FinanceExtendedController::class, 'getIncomeStatement']);
 
         Route::get('/rekap-biaya-produksi', [FinanceExtendedController::class, 'getProductionCostSummary']);
     });

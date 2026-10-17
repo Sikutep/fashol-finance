@@ -18,9 +18,12 @@ import { useLoading } from '../context/LoadingContext';
 export default function PayrollBulananView({ currentRole }) {
   const { showLoading, showSuccess, hideLoading } = useLoading();
   const [items, setItems] = useState([]);
+  const [availablePeriods, setAvailablePeriods] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [period, setPeriod] = useState('Juni 2025');
+  const [period, setPeriod] = useState(() => {
+    return new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(new Date());
+  });
   const [selectedSlip, setSelectedSlip] = useState(null);
   const [statusOverride, setStatusOverride] = useState(null);
 
@@ -31,6 +34,9 @@ export default function PayrollBulananView({ currentRole }) {
       const json = await res.json();
       if (json.status === 'success') {
         setItems(json.data || []);
+        if (json.available_periods && json.available_periods.length > 0) {
+          setAvailablePeriods(json.available_periods);
+        }
       }
     } catch (e) {
       console.error('Error fetching monthly payroll:', e);
@@ -183,9 +189,9 @@ export default function PayrollBulananView({ currentRole }) {
             aria-label="Pilih Bulan Payroll"
             className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           >
-            <option value="Juni 2025">Juni 2025</option>
-            <option value="Mei 2025">Mei 2025</option>
-            <option value="April 2025">April 2025</option>
+            {(availablePeriods.length > 0 ? availablePeriods : [period]).map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
           </select>
 
           <button

@@ -28,45 +28,104 @@ class DashboardController extends Controller
             $payrollEnd = $payrollStart->copy()->addDays(6)->endOfDay();
         }
 
-        $payrollThisWeek = DailyProduction::whereBetween('production_date', [
+        $payrollThisWeek = (float) DailyProduction::whereBetween('production_date', [
             $payrollStart->format('Y-m-d'),
             $payrollEnd->format('Y-m-d')
         ])->sum('total_wage');
 
-        // Jika minggu ini belum ada transaksi, hitung total siklus minggu terakhir yang memiliki aktivitas
-        if ($payrollThisWeek <= 0) {
-            $latestTrxDate = DailyProduction::max('production_date');
-            if ($latestTrxDate) {
-                $lastTrxCarbon = Carbon::parse($latestTrxDate);
-                $pStart = $lastTrxCarbon->copy()->previous(Carbon::THURSDAY);
-                if ($lastTrxCarbon->dayOfWeek === Carbon::THURSDAY) {
-                    $pStart = $lastTrxCarbon->copy()->startOfDay();
-                }
-                $pEnd = $pStart->copy()->addDays(6)->endOfDay();
-                $payrollThisWeek = DailyProduction::whereBetween('production_date', [
-                    $pStart->format('Y-m-d'),
-                    $pEnd->format('Y-m-d')
-                ])->sum('total_wage');
-            }
-        }
+        $prevWeekStart = $payrollStart->copy()->subDays(7);
+        $prevWeekEnd = $payrollEnd->copy()->subDays(7);
+        $prevWeekPayroll = (float) DailyProduction::whereBetween('production_date', [
+            $prevWeekStart->format('Y-m-d'),
+            $prevWeekEnd->format('Y-m-d')
+        ])->sum('total_wage');
 
-        // 2. Total Pendapatan & Pengeluaran Bulan Ini
+        $payrollTrend = 0.0;
+        $payrollTrendPos = true;
+        if ($prevWeekPayroll > 0) {
+            $payrollTrend = round((($payrollThisWeek - $prevWeekPayroll) / $prevWeekPayroll) * 100, 1);
+            $payrollTrendPos = $payrollTrend >= 0;
+        } elseif ($payrollThisWeek > 0) {
+            $payrollTrend = 100.0;
+            $payrollTrendPos = true;
+        }
+        $payrollTrendFormatted = ($payrollTrend >= 0 ? '+' : '') . str_replace('.', ',', (string)$payrollTrend) . '%';
+
+        // 2. Total Pendapatan & Pengeluaran Bulan Ini vs Bulan Lalu
         $totalIncome = (float) FinanceTransaction::where('type', 'income')
             ->whereMonth('transaction_date', $now->month)
             ->whereYear('transaction_date', $now->year)
             ->sum('amount');
+
+        $prevMonthDate = $now->copy()->subMonth();
+        $prevMonthIncome = (float) FinanceTransaction::where('type', 'income')
+            ->whereMonth('transaction_date', $prevMonthDate->month)
+            ->whereYear('transaction_date', $prevMonthDate->year)
+            ->sum('amount');
+
+        $incomeTrend = 0.0;
+        $incomeTrendPos = true;
+        if ($prevMonthIncome > 0) {
+            $incomeTrend = round((($totalIncome - $prevMonthIncome) / $prevMonthIncome) * 100, 1);
+            $incomeTrendPos = $incomeTrend >= 0;
+        } elseif ($totalIncome > 0) {
+            $incomeTrend = 100.0;
+            $incomeTrendPos = true;
+        }
+        $incomeTrendFormatted = ($incomeTrend >= 0 ? '+' : '') . str_replace('.', ',', (string)$incomeTrend) . '%';
 
         $totalExpense = (float) FinanceTransaction::where('type', 'expense')
             ->whereMonth('transaction_date', $now->month)
             ->whereYear('transaction_date', $now->year)
             ->sum('amount');
 
-        // 3. Biaya Produksi (Total Upah Produksi + Pengeluaran Produksi)
-        $productionWageTotal = (float) DailyProduction::sum('total_wage');
+        $prevMonthExpense = (float) FinanceTransaction::where('type', 'expense')
+            ->whereMonth('transaction_date', $prevMonthDate->month)
+            ->whereYear('transaction_date', $prevMonthDate->year)
+            ->sum('amount');
+
+        $expenseTrend = 0.0;
+        $expenseTrendPos = false;
+        if ($prevMonthExpense > 0) {
+            $expenseTrend = round((($totalExpense - $prevMonthExpense) / $prevMonthExpense) * 100, 1);
+            $expenseTrendPos = $expenseTrend <= 0;
+        } elseif ($totalExpense > 0) {
+            $expenseTrend = 100.0;
+            $expenseTrendPos = false;
+        }
+        $expenseTrendFormatted = ($expenseTrend >= 0 ? '+' : '') . str_replace('.', ',', (string)$expenseTrend) . '%';
+
+        // 3. Biaya Produksi Bulan Ini vs Bulan Lalu
+        $productionWageTotal = (float) DailyProduction::whereMonth('production_date', $now->month)
+            ->whereYear('production_date', $now->year)
+            ->sum('total_wage');
         $productionMaterialExpense = (float) FinanceTransaction::where('type', 'expense')
             ->where('category', 'like', '%Bahan%')
+            ->whereMonth('transaction_date', $now->month)
+            ->whereYear('transaction_date', $now->year)
             ->sum('amount');
         $totalProductionCost = $productionWageTotal + $productionMaterialExpense;
+
+        $prevProdWage = (float) DailyProduction::whereMonth('production_date', $prevMonthDate->month)
+            ->whereYear('production_date', $prevMonthDate->year)
+            ->sum('total_wage');
+        $prevProdMat = (float) FinanceTransaction::where('type', 'expense')
+            ->where('category', 'like', '%Bahan%')
+            ->whereMonth('transaction_date', $prevMonthDate->month)
+            ->whereYear('transaction_date', $prevMonthDate->year)
+            ->sum('amount');
+        $prevProdCost = $prevProdWage + $prevProdMat;
+
+        $prodCostTrend = 0.0;
+        $prodCostTrendPos = true;
+        if ($prevProdCost > 0) {
+            $prodCostTrend = round((($totalProductionCost - $prevProdCost) / $prevProdCost) * 100, 1);
+            $prodCostTrendPos = $prodCostTrend >= 0;
+        } elseif ($totalProductionCost > 0) {
+            $prodCostTrend = 100.0;
+            $prodCostTrendPos = true;
+        }
+        $prodCostTrendFormatted = ($prodCostTrend >= 0 ? '+' : '') . str_replace('.', ',', (string)$prodCostTrend) . '%';
 
         // 4. Arus Keuangan (Grafik 6 Bulan Terakhir Dinamis)
         $chartMonths = [];
@@ -107,7 +166,7 @@ class DashboardController extends Controller
                 'name' => $item->product_name,
                 'total_hpp' => (float) $item->total_hpp,
                 'total_processes' => $item->total_processes,
-                'trend' => '+2.1%',
+                'trend' => 'Aktif',
                 'updated_at' => Carbon::now()->format('d M'),
             ];
         });
@@ -154,37 +213,44 @@ class DashboardController extends Controller
 
         $recentActivities = $recentFinances->concat($recentProductions)->sortByDesc('date')->values()->take(5);
 
+        $monthNames = [
+            1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April',
+            5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus',
+            9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
+        ];
+        $currentPeriodLabel = ($monthNames[$now->month] ?? $now->format('F')) . ' ' . $now->year;
+
         return response()->json([
             'status' => 'success',
-            'period' => 'Juni ' . $now->year,
+            'period' => $currentPeriodLabel,
             'metrics' => [
                 'payroll_this_week' => [
                     'value' => (float) $payrollThisWeek,
                     'formatted' => 'Rp ' . number_format($payrollThisWeek, 0, ',', '.'),
-                    'trend' => '+0,4%',
+                    'trend' => $payrollTrendFormatted,
                     'trend_label' => 'dibanding periode lalu',
-                    'is_positive' => true,
+                    'is_positive' => $payrollTrendPos,
                 ],
                 'total_income' => [
                     'value' => (float) $totalIncome,
                     'formatted' => 'Rp ' . number_format($totalIncome, 0, ',', '.'),
-                    'trend' => '+12,0%',
+                    'trend' => $incomeTrendFormatted,
                     'trend_label' => 'dibanding periode lalu',
-                    'is_positive' => true,
+                    'is_positive' => $incomeTrendPos,
                 ],
                 'total_expense' => [
                     'value' => (float) $totalExpense,
                     'formatted' => 'Rp ' . number_format($totalExpense, 0, ',', '.'),
-                    'trend' => '-3,2%',
+                    'trend' => $expenseTrendFormatted,
                     'trend_label' => 'dibanding periode lalu',
-                    'is_positive' => false,
+                    'is_positive' => $expenseTrendPos,
                 ],
                 'production_cost' => [
                     'value' => (float) $totalProductionCost,
                     'formatted' => 'Rp ' . number_format($totalProductionCost, 0, ',', '.'),
-                    'trend' => '+5,1%',
+                    'trend' => $prodCostTrendFormatted,
                     'trend_label' => 'dibanding periode lalu',
-                    'is_positive' => true,
+                    'is_positive' => $prodCostTrendPos,
                 ],
             ],
             'cashflow_chart' => [

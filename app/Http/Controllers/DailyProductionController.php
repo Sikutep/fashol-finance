@@ -8,6 +8,7 @@ use App\Models\DailyProductionItem;
 use App\Models\Worker;
 use App\Models\ProductProcessRate;
 use App\Models\Product;
+use App\Models\ProductGroup;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
@@ -111,57 +112,168 @@ class DailyProductionController extends Controller
             'production_date' => 'required|date',
             'worker_id' => 'required|exists:workers,id',
             'process_name' => 'required|string|max:100',
-            'product_name' => 'required|string|max:255',
+            'notes' => 'nullable|string',
+            // Support either multiple items array OR single item fields
+            'items' => 'nullable|array|min:1',
+            'items.*.product_name' => 'required_with:items|string|max:255',
+            'items.*.variation' => 'nullable|string|max:255',
+            'items.*.color' => 'nullable|string|max:100',
+            'items.*.qty' => 'required_with:items|integer|min:1',
+            'items.*.rate' => 'nullable|numeric|min:0',
+            'items.*.product_id' => 'nullable|integer',
+            // Fallback for single item format
+            'product_name' => 'required_without:items|string|max:255',
             'variation' => 'nullable|string|max:255',
             'color' => 'nullable|string|max:100',
-            'qty' => 'required|integer|min:1',
+            'qty' => 'required_without:items|integer|min:1',
             'rate' => 'nullable|numeric|min:0',
+            'product_id' => 'nullable|integer',
         ]);
 
-        return DB::transaction(function () use ($validated, $request) {
-            // Determine rate: if not provided or 0, dynamically look up from product_process_rates
-            $rate = $validated['rate'] ?? null;
-            if (!$rate || $rate <= 0) {
-                $rateRecord = ProductProcessRate::where('product_name', $validated['product_name'])
-                    ->where('process_name', $validated['process_name'])
-                    ->where('is_active', true)
-                    ->first();
+        $worker = Worker::findOrFail($validated['worker_id']);
+        if ($worker->status !== 'Aktif') {
+            return response()->json([
+                'status' => 'error',
+                'message' => "Pekerja {$worker->name} berstatus Nonaktif dan tidak dapat menerima transaksi produksi baru.",
+            ], 422);
+        }
 
-                $rate = $rateRecord ? (float) $rateRecord->rate : 2000;
+        // Normalize raw items list
+        $rawItems = [];
+        if (!empty($validated['items'])) {
+            $rawItems = $validated['items'];
+        } else {
+            $rawItems[] = [
+                'product_name' => $validated['product_name'],
+                'variation' => $validated['variation'] ?? 'All Size',
+                'color' => $validated['color'] ?? 'Black',
+                'qty' => (int) $validated['qty'],
+                'rate' => isset($validated['rate']) && $validated['rate'] > 0 ? (float) $validated['rate'] : null,
+                'product_id' => $validated['product_id'] ?? null,
+            ];
+        }
+
+        return DB::transaction(function () use ($validated, $rawItems, $request) {
+            $preparedItems = [];
+            $totalQty = 0;
+            $totalWage = 0;
+
+            foreach ($rawItems as $item) {
+                $qty = (int) $item['qty'];
+                $rate = isset($item['rate']) && $item['rate'] > 0 ? (float) $item['rate'] : null;
+
+                // Look up rate from HPP if not provided
+                if (!$rate || $rate <= 0) {
+                    $rateRecord = ProductProcessRate::where('process_name', $validated['process_name'])
+                        ->where('is_active', true)
+                        ->where('product_name', $item['product_name'])
+                        ->first();
+
+                    if (!$rateRecord) {
+                        $hasSpecificCustomRates = ProductProcessRate::where('product_name', $item['product_name'])->exists();
+
+                        if (!$hasSpecificCustomRates) {
+                            $matchedGroup = ProductGroup::where('name', $item['product_name'])
+                                ->orWhereRaw("? LIKE CONCAT('%', name, '%')", [$item['product_name']])
+                                ->first();
+
+                            if ($matchedGroup) {
+                                $rateRecord = ProductProcessRate::where('process_name', $validated['process_name'])
+                                    ->where('is_active', true)
+                                    ->where(function ($q) use ($matchedGroup) {
+                                        $q->where('product_group_id', $matchedGroup->id)
+                                          ->orWhere('product_name', $matchedGroup->name);
+                                    })
+                                    ->first();
+                            }
+                        }
+                    }
+
+                    if (!$rateRecord) {
+                        return response()->json([
+                            'status' => 'error',
+                            'message' => "Tarif aktif untuk produk '{$item['product_name']}' dan proses '{$validated['process_name']}' belum ditentukan di modul HPP.",
+                        ], 422);
+                    }
+                    $rate = (float) $rateRecord->rate;
+                }
+
+                $itemWage = $qty * $rate;
+                $totalQty += $qty;
+                $totalWage += $itemWage;
+
+                // Intelligent resolution to existing Warehouse product SKU
+                $productModel = null;
+                if (!empty($item['product_id'])) {
+                    $productModel = Product::find($item['product_id']);
+                }
+
+                if (!$productModel) {
+                    // 1. Resolve matching Product Group
+                    $group = ProductGroup::where('name', $item['product_name'])
+                        ->orWhere('long_name', 'like', "%{$item['product_name']}%")
+                        ->first();
+
+                    if (!$group) {
+                        $allGroups = ProductGroup::all();
+                        foreach ($allGroups as $g) {
+                            if (stripos($item['product_name'], $g->name) !== false || 
+                                ($g->long_name && stripos($item['product_name'], $g->long_name) !== false)) {
+                                $group = $g;
+                                break;
+                            }
+                        }
+                    }
+
+                    if ($group) {
+                        // 2. Exact match on (product_group_id + color + variation)
+                        $q = Product::where('product_group_id', $group->id);
+                        if (!empty($item['color'])) {
+                            $q->where('variation', 'like', '%' . trim($item['color']) . '%');
+                        }
+                        if (!empty($item['variation'])) {
+                            $q->where('variation', 'like', '%' . trim($item['variation']) . '%');
+                        }
+                        $productModel = $q->first();
+
+                        // 3. Fallback: match by color in that group
+                        if (!$productModel && !empty($item['color'])) {
+                            $productModel = Product::where('product_group_id', $group->id)
+                                ->where('variation', 'like', '%' . trim($item['color']) . '%')
+                                ->first();
+                        }
+
+                        // 4. Fallback: first product in that group
+                        if (!$productModel) {
+                            $productModel = Product::where('product_group_id', $group->id)->first();
+                        }
+                    }
+                }
+
+                if (!$productModel) {
+                    $productModel = Product::where('name', 'like', "%{$item['product_name']}%")->first() ?? Product::first();
+                }
+
+                $preparedItems[] = [
+                    'product_id' => $productModel?->id,
+                    'product_name' => $item['product_name'],
+                    'variation' => $item['variation'] ?? 'All Size',
+                    'color' => $item['color'] ?? 'Black',
+                    'qty' => $qty,
+                    'rate' => $rate,
+                    'total_wage' => $itemWage,
+                ];
             }
 
-            $totalWage = (int) $validated['qty'] * (float) $rate;
-
-            // Generate transaction number PRD-YYMMXX
+            // Generate unique sequential transaction number PRD-YYMM-XXX
             $datePart = Carbon::parse($validated['production_date'])->format('ym');
-            $latestTrx = DailyProduction::where('transaction_number', 'like', "PRD-{$datePart}%")
-                ->orderBy('id', 'desc')
-                ->first();
-
-            $seq = 1;
-            if ($latestTrx) {
-                $lastSeq = (int) substr($latestTrx->transaction_number, -2);
-                $seq = $lastSeq + 1;
-            }
+            $countThisMonth = DailyProduction::where('transaction_number', 'like', "PRD-{$datePart}%")->count();
+            $seq = $countThisMonth + 1;
             $trxNumber = 'PRD-' . $datePart . str_pad($seq, 2, '0', STR_PAD_LEFT);
 
-            // Intelligent resolution to existing Warehouse product SKU
-            $productModel = null;
-            if (!empty($validated['product_id'])) {
-                $productModel = Product::find($validated['product_id']);
-            }
-            if (!$productModel) {
-                if (stripos($validated['product_name'], 'Baggy') !== false) {
-                    $productModel = Product::where('product_group_id', 1)->first();
-                } elseif (stripos($validated['product_name'], 'Scuba') !== false) {
-                    $productModel = Product::where('product_group_id', 4)->first();
-                } elseif (stripos($validated['product_name'], 'Jogger') !== false) {
-                    $productModel = Product::where('product_group_id', 2)->first();
-                } elseif (stripos($validated['product_name'], 'Pants') !== false) {
-                    $productModel = Product::where('product_group_id', 3)->first();
-                } else {
-                    $productModel = Product::where('name', 'like', "%{$validated['product_name']}%")->first() ?? Product::first();
-                }
+            while (DailyProduction::where('transaction_number', $trxNumber)->exists()) {
+                $seq++;
+                $trxNumber = 'PRD-' . $datePart . str_pad($seq, 2, '0', STR_PAD_LEFT);
             }
 
             $production = DailyProduction::create([
@@ -169,23 +281,18 @@ class DailyProductionController extends Controller
                 'production_date' => $validated['production_date'],
                 'worker_id' => $validated['worker_id'],
                 'process_name' => $validated['process_name'],
-                'total_qty' => $validated['qty'],
+                'total_qty' => $totalQty,
                 'total_wage' => $totalWage,
-                'notes' => 'Input produksi via sistem ERP Finance',
+                'notes' => $validated['notes'] ?? 'Input produksi via sistem ERP Finance',
                 'status' => 'Tercatat',
                 'created_by' => Auth::id(),
             ]);
 
-            DailyProductionItem::create([
-                'daily_production_id' => $production->id,
-                'product_id' => $productModel?->id,
-                'product_name' => $validated['product_name'],
-                'variation' => $validated['variation'] ?? 'All Size',
-                'color' => $validated['color'] ?? 'Black',
-                'qty' => $validated['qty'],
-                'rate' => $rate,
-                'total_wage' => $totalWage,
-            ]);
+            foreach ($preparedItems as $prep) {
+                DailyProductionItem::create(array_merge($prep, [
+                    'daily_production_id' => $production->id,
+                ]));
+            }
 
             return response()->json([
                 'status' => 'success',
@@ -198,6 +305,15 @@ class DailyProductionController extends Controller
     public function destroy($id)
     {
         $production = DailyProduction::findOrFail($id);
+
+        // Scope Guard: Transaksi yang sudah masuk payroll / disetujui / dibayar tidak boleh dihapus
+        if (in_array($production->status, ['Disetujui', 'Dibayar', 'Masuk Payroll'])) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Transaksi produksi yang telah disetujui atau masuk payroll tidak dapat dihapus demi integritas keuangan.',
+            ], 422);
+        }
+
         $production->delete();
 
         return response()->json([

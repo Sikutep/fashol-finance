@@ -42,23 +42,20 @@ class AuthController extends Controller
 
         $user = User::where('email', $credentials['email'])->first();
 
-        if ($user) {
-            // Check real hash or standard local dev fallback ('admin123' or 'password')
-            if (Hash::check($credentials['password'], $user->password) || in_array($credentials['password'], ['admin123', 'password', 'fashol123'])) {
-                Auth::login($user);
-                $request->session()->regenerate();
+        if ($user && Hash::check($credentials['password'], $user->password)) {
+            Auth::login($user);
+            $request->session()->regenerate();
 
-                return response()->json([
-                    'status' => 'success',
-                    'message' => 'Login berhasil. Selamat datang kembali, ' . $user->name,
-                    'user' => [
-                        'id' => $user->id,
-                        'name' => $user->name,
-                        'email' => $user->email,
-                        'role' => $user->role ?? 'admin',
-                    ],
-                ]);
-            }
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Login berhasil. Selamat datang kembali, ' . $user->name,
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $user->role ?? 'admin',
+                ],
+            ]);
         }
 
         return response()->json([

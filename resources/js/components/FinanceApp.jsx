@@ -3,12 +3,14 @@ import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 import DashboardView from './DashboardView';
 import MasterPekerjaView from './MasterPekerjaView';
+import MasterProsesView from './MasterProsesView';
 import ProduksiHarianView from './ProduksiHarianView';
 import PayrollMingguanView from './PayrollMingguanView';
 import PayrollBulananView from './PayrollBulananView';
 import HppProdukView from './HppProdukView';
 import KeuanganView from './KeuanganView';
 import RekapBiayaProduksiView from './RekapBiayaProduksiView';
+import LaporanLabaRugiView from './LaporanLabaRugiView';
 import GenericSectionView from './GenericSectionView';
 import LoginPage from './LoginPage';
 import { useLoading } from '../context/LoadingContext';
@@ -115,7 +117,7 @@ export default function FinanceApp() {
         <Navbar
           currentUser={currentUser}
           onLogout={handleLogout}
-          period="Juni 2025"
+          period={dashboardData?.period}
         />
 
         {/* Page Content Container (Comfortable, spacious layout) */}
@@ -134,7 +136,13 @@ export default function FinanceApp() {
             />
           )}
 
-          {activeTab === 'produksi-harian' && (
+          {activeTab === 'master-proses' && (
+            <MasterProsesView
+              currentRole={currentUser.role}
+            />
+          )}
+
+          {(activeTab === 'produksi-harian' || activeTab === 'riwayat-produksi') && (
             <ProduksiHarianView
               currentRole={currentUser.role}
             />
@@ -170,7 +178,13 @@ export default function FinanceApp() {
             />
           )}
 
-          {['riwayat-produksi', 'laporan-finance', 'pengaturan'].includes(activeTab) && (
+          {activeTab === 'laporan-finance' && (
+            <LaporanLabaRugiView
+              currentRole={currentUser.role}
+            />
+          )}
+
+          {activeTab === 'pengaturan' && (
             <GenericSectionView
               tab={activeTab}
               currentRole={currentUser.role}

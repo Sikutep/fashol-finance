@@ -38,13 +38,16 @@ export default function ProduksiHarianView({ currentRole }) {
   const [formData, setFormData] = useState({
     production_date: new Date().toISOString().slice(0, 10),
     worker_id: '',
-    process_name: 'Jahit Luar',
-    product_name: 'Baggy Pants Reguler',
-    variation: 'All Size',
-    color: 'Black',
+    process_name: '',
+    product_name: '',
+    variation: '',
+    color: '',
     qty: 1,
-    rate: 3200,
+    rate: 0,
   });
+
+  const currentColors = options.group_attributes?.[formData.product_name]?.colors || options.colors || [];
+  const currentVariations = options.group_attributes?.[formData.product_name]?.variations || options.variations || [];
 
   const fetchProductions = async () => {
     try {
@@ -67,11 +70,25 @@ export default function ProduksiHarianView({ currentRole }) {
       if (json.status === 'success') {
         setOptions(json);
         if (json.workers.length > 0 && !formData.worker_id) {
+          const firstWorker = json.workers[0];
+          const firstProduct = json.products?.[0] || '';
+          const firstProcess = firstWorker.process && json.processes?.includes(firstWorker.process)
+            ? firstWorker.process
+            : (json.processes?.[0] || '');
+          const firstVariation = json.variations?.[0] || 'All Size';
+          const firstColor = json.colors?.[0] || 'Hitam';
+
           setFormData(prev => ({
             ...prev,
-            worker_id: json.workers[0].id,
-            process_name: json.workers[0].process || 'Jahit Luar',
+            worker_id: firstWorker.id,
+            process_name: firstProcess,
+            product_name: firstProduct,
+            variation: firstVariation,
+            color: firstColor,
           }));
+          if (firstProduct && firstProcess) {
+            fetchRate(firstProduct, firstProcess);
+          }
         }
       }
     } catch (err) {
@@ -114,17 +131,49 @@ export default function ProduksiHarianView({ currentRole }) {
 
   const handleOpenAddModal = () => {
     const defaultWorker = options.workers[0];
+    const defaultProduct = options.products?.[0] || '';
+    const defaultProcess = defaultWorker?.process && options.processes?.includes(defaultWorker.process)
+      ? defaultWorker.process
+      : (options.processes?.[0] || '');
+
+    const grpAttrs = defaultProduct ? options.group_attributes?.[defaultProduct] : null;
+    const defaultColor = grpAttrs?.colors?.[0] || options.colors?.[0] || 'HITAM';
+    const defaultVar = grpAttrs?.variations?.[0] || options.variations?.[0] || 'ALL SIZE';
+
     setFormData({
       production_date: new Date().toISOString().slice(0, 10),
       worker_id: defaultWorker?.id || '',
-      process_name: defaultWorker?.process || 'Jahit Luar',
-      product_name: options.products[0] || 'Baggy Pants Reguler',
-      variation: 'All Size',
-      color: 'Black',
+      process_name: defaultProcess,
+      product_name: defaultProduct,
+      variation: defaultVar,
+      color: defaultColor,
       qty: 1,
-      rate: 3200,
+      rate: 0,
     });
+    if (defaultProduct && defaultProcess) {
+      fetchRate(defaultProduct, defaultProcess);
+    }
     setIsModalOpen(true);
+  };
+
+  const handleProductChange = (newProduct) => {
+    const grpAttrs = options.group_attributes?.[newProduct];
+    const availableColors = grpAttrs?.colors?.length > 0 ? grpAttrs.colors : (options.colors || []);
+    const availableVariations = grpAttrs?.variations?.length > 0 ? grpAttrs.variations : (options.variations || []);
+
+    const nextColor = availableColors.includes(formData.color) ? formData.color : (availableColors[0] || 'HITAM');
+    const nextVar = availableVariations.includes(formData.variation) ? formData.variation : (availableVariations[0] || 'ALL SIZE');
+
+    setFormData(prev => ({
+      ...prev,
+      product_name: newProduct,
+      color: nextColor,
+      variation: nextVar,
+    }));
+
+    if (newProduct && formData.process_name) {
+      fetchRate(newProduct, formData.process_name);
+    }
   };
 
   const handleWorkerChange = (workerId) => {
@@ -505,15 +554,20 @@ export default function ProduksiHarianView({ currentRole }) {
                   </select>
                 </div>
 
-                {/* Produk */}
+                {/* Model Produk (Product Group) */}
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Produk
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-semibold text-slate-700">
+                      Model Produk
+                    </label>
+                    <span className="text-xs text-slate-400">
+                      Product Group
+                    </span>
+                  </div>
                   <select
                     value={formData.product_name}
-                    onChange={(e) => setFormData({ ...formData, product_name: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600"
+                    onChange={(e) => handleProductChange(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600 bg-white font-medium"
                   >
                     {options.products.map(prod => (
                       <option key={prod} value={prod}>{prod}</option>
@@ -521,17 +575,17 @@ export default function ProduksiHarianView({ currentRole }) {
                   </select>
                 </div>
 
-                {/* Varian */}
+                {/* Varian (Ukuran) */}
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Varian
+                    Varian (Ukuran)
                   </label>
                   <select
                     value={formData.variation}
                     onChange={(e) => setFormData({ ...formData, variation: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600 bg-white"
                   >
-                    {options.variations.map(v => (
+                    {currentVariations.map(v => (
                       <option key={v} value={v}>{v}</option>
                     ))}
                   </select>
@@ -540,15 +594,17 @@ export default function ProduksiHarianView({ currentRole }) {
                 {/* Warna */}
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Warna
+                    Warna Kain
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={formData.color}
                     onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                    placeholder="Contoh: Black, Navy, Mocca"
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600"
-                  />
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600 bg-white"
+                  >
+                    {currentColors.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Kuantitas (pcs) */}
@@ -586,12 +642,20 @@ export default function ProduksiHarianView({ currentRole }) {
 
               </div>
 
-              {/* Dynamic Estimated Total Wage Preview */}
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-sm">
-                <span className="text-slate-600 font-medium">Estimasi Total Upah:</span>
-                <span className="text-base font-extrabold text-emerald-800">
-                  Rp {(formData.qty * formData.rate).toLocaleString('id-ID')}
-                </span>
+              {/* Informative SKU Linkage & Estimated Total Wage Preview */}
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500 font-medium">Link SKU Warehouse:</span>
+                  <span className="font-mono font-bold text-emerald-900 bg-emerald-100/80 px-2 py-0.5 rounded border border-emerald-200">
+                    {formData.product_name}-{formData.color}-{formData.variation}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm pt-2 border-t border-slate-200/60">
+                  <span className="text-slate-600 font-medium">Estimasi Total Upah:</span>
+                  <span className="text-base font-extrabold text-emerald-800">
+                    Rp {(formData.qty * formData.rate).toLocaleString('id-ID')}
+                  </span>
+                </div>
               </div>
 
               {/* Action Buttons */}

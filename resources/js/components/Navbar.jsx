@@ -4,8 +4,9 @@ import { Search, Calendar, Bell, LogOut, Shield } from 'lucide-react';
 export default function Navbar({ 
   currentUser, 
   onLogout,
-  period = 'Juni 2025'
+  period
 }) {
+  const currentPeriod = period || new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(new Date());
   const initials = currentUser?.name
     ? currentUser.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
     : 'U';
@@ -43,7 +44,7 @@ export default function Navbar({
         {/* Period Selector */}
         <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 shadow-xs">
           <Calendar className="w-4 h-4 text-slate-400" />
-          <span>{period}</span>
+          <span>{currentPeriod}</span>
         </div>
 
         {/* Notification Bell */}

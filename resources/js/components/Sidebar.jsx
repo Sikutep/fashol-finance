@@ -2,6 +2,7 @@ import React from 'react';
 import { 
   LayoutDashboard, 
   Users, 
+  Scissors,
   Activity, 
   Clock, 
   CreditCard, 
@@ -26,6 +27,7 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
       title: 'OPERASIONAL',
       items: [
         { id: 'master-pekerja', label: 'Master Pekerja', icon: Users },
+        { id: 'master-proses', label: 'Master Proses', icon: Scissors },
         { id: 'produksi-harian', label: 'Produksi Harian', icon: Activity },
         { id: 'riwayat-produksi', label: 'Riwayat Produksi', icon: Clock },
         { id: 'payroll-mingguan', label: 'Payroll Mingguan', icon: CreditCard },

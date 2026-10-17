@@ -15,17 +15,17 @@ import {
 export default function DashboardView({ data, currentRole, onNavigate }) {
   const metrics = data?.metrics || {};
   const cashflow = data?.cashflow_chart || { 
-    months: ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun'], 
-    income: [28, 32, 29.5, 38, 41.5, 43.4], 
-    expense: [21, 23, 26, 24.5, 28, 8.25] 
+    months: [], 
+    income: [], 
+    expense: [] 
   };
   const hppList = data?.hpp_summary || [];
   const activities = data?.recent_activities || [];
 
   const maxVal = Math.max(
-    ...cashflow.income.map(Number), 
-    ...cashflow.expense.map(Number),
-    50000000
+    ...(cashflow.income || []).map(Number), 
+    ...(cashflow.expense || []).map(Number),
+    1
   );
 
   return (
@@ -55,11 +55,11 @@ export default function DashboardView({ data, currentRole, onNavigate }) {
             </div>
             <div className="text-sm font-semibold text-slate-500">Payroll Minggu Ini</div>
             <div className="text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
-              {metrics.payroll_this_week?.formatted || 'Rp 755.900'}
+              {metrics.payroll_this_week?.formatted || 'Rp 0'}
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 text-xs font-semibold text-emerald-600 flex items-center gap-1.5">
-            <span className="font-bold">{metrics.payroll_this_week?.trend || '+0,4%'}</span>
+            <span className="font-bold">{metrics.payroll_this_week?.trend || '0%'}</span>
             <span className="text-slate-400 font-normal">dibanding periode lalu</span>
           </div>
         </div>
@@ -72,11 +72,11 @@ export default function DashboardView({ data, currentRole, onNavigate }) {
             </div>
             <div className="text-sm font-semibold text-slate-500">Total Pendapatan</div>
             <div className="text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
-              {metrics.total_income?.formatted || 'Rp 43.400.000'}
+              {metrics.total_income?.formatted || 'Rp 0'}
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 text-xs font-semibold text-emerald-600 flex items-center gap-1.5">
-            <span className="font-bold">{metrics.total_income?.trend || '+12,0%'}</span>
+            <span className="font-bold">{metrics.total_income?.trend || '0%'}</span>
             <span className="text-slate-400 font-normal">dibanding periode lalu</span>
           </div>
         </div>
@@ -89,11 +89,11 @@ export default function DashboardView({ data, currentRole, onNavigate }) {
             </div>
             <div className="text-sm font-semibold text-slate-500">Total Pengeluaran</div>
             <div className="text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
-              {metrics.total_expense?.formatted || 'Rp 8.250.000'}
+              {metrics.total_expense?.formatted || 'Rp 0'}
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 text-xs font-semibold text-rose-500 flex items-center gap-1.5">
-            <span className="font-bold">{metrics.total_expense?.trend || '-3,2%'}</span>
+            <span className="font-bold">{metrics.total_expense?.trend || '0%'}</span>
             <span className="text-slate-400 font-normal">dibanding periode lalu</span>
           </div>
         </div>
@@ -106,11 +106,11 @@ export default function DashboardView({ data, currentRole, onNavigate }) {
             </div>
             <div className="text-sm font-semibold text-slate-500">Biaya Produksi</div>
             <div className="text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
-              {metrics.production_cost?.formatted || 'Rp 4.220.900'}
+              {metrics.production_cost?.formatted || 'Rp 0'}
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 text-xs font-semibold text-emerald-600 flex items-center gap-1.5">
-            <span className="font-bold">{metrics.production_cost?.trend || '+5,1%'}</span>
+            <span className="font-bold">{metrics.production_cost?.trend || '0%'}</span>
             <span className="text-slate-400 font-normal">dibanding periode lalu</span>
           </div>
         </div>
@@ -146,34 +146,40 @@ export default function DashboardView({ data, currentRole, onNavigate }) {
 
           {/* Chart Graphic Area */}
           <div className="pt-8 h-64 flex items-end justify-between gap-4 px-3">
-            {cashflow.months.map((month, idx) => {
-              const inc = Number(cashflow.income[idx] || 0);
-              const exp = Number(cashflow.expense[idx] || 0);
-              const incPct = Math.min(100, Math.max(16, (inc / maxVal) * 100));
-              const expPct = Math.min(100, Math.max(12, (exp / maxVal) * 100));
+            {cashflow.months.length === 0 ? (
+              <div className="w-full h-full flex items-center justify-center text-xs text-slate-400">
+                Memuat data arus keuangan...
+              </div>
+            ) : (
+              cashflow.months.map((month, idx) => {
+                const inc = Number(cashflow.income[idx] || 0);
+                const exp = Number(cashflow.expense[idx] || 0);
+                const incPct = maxVal > 0 ? Math.min(100, Math.max(16, (inc / maxVal) * 100)) : 16;
+                const expPct = maxVal > 0 ? Math.min(100, Math.max(12, (exp / maxVal) * 100)) : 12;
 
-              return (
-                <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group">
-                  <div className="w-full flex items-end justify-center gap-2 h-48 pb-2">
-                    {/* Income Bar (Dark Forest Green) */}
-                    <div 
-                      className="w-5 rounded-t-md bg-[#163A2B] hover:opacity-90 transition-all cursor-pointer relative"
-                      style={{ height: `${incPct}%` }}
-                      title={`Pendapatan ${month}: Rp ${inc.toLocaleString('id-ID')}`}
-                    />
-                    {/* Expense Bar (Gold / Mustard) */}
-                    <div 
-                      className="w-5 rounded-t-md bg-[#C5A859] hover:opacity-90 transition-all cursor-pointer relative"
-                      style={{ height: `${expPct}%` }}
-                      title={`Pengeluaran ${month}: Rp ${exp.toLocaleString('id-ID')}`}
-                    />
+                return (
+                  <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group">
+                    <div className="w-full flex items-end justify-center gap-2 h-48 pb-2">
+                      {/* Income Bar (Dark Forest Green) */}
+                      <div 
+                        className="w-5 rounded-t-md bg-[#163A2B] hover:opacity-90 transition-all cursor-pointer relative"
+                        style={{ height: `${incPct}%` }}
+                        title={`Pendapatan ${month}: Rp ${inc.toLocaleString('id-ID')}`}
+                      />
+                      {/* Expense Bar (Gold / Mustard) */}
+                      <div 
+                        className="w-5 rounded-t-md bg-[#C5A859] hover:opacity-90 transition-all cursor-pointer relative"
+                        style={{ height: `${expPct}%` }}
+                        title={`Pengeluaran ${month}: Rp ${exp.toLocaleString('id-ID')}`}
+                      />
+                    </div>
+                    <span className="text-xs font-semibold text-slate-600 pt-2 border-t border-slate-100 w-full text-center">
+                      {month}
+                    </span>
                   </div>
-                  <span className="text-xs font-semibold text-slate-600 pt-2 border-t border-slate-100 w-full text-center">
-                    {month}
-                  </span>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
 

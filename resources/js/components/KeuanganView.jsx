@@ -18,7 +18,7 @@ import {
 import { useLoading } from '../context/LoadingContext';
 
 export default function KeuanganView({ currentRole }) {
-  const { showTimedLoading } = useLoading();
+  const { showLoading, showSuccess, hideLoading } = useLoading();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -28,13 +28,32 @@ export default function KeuanganView({ currentRole }) {
   // Form state
   const [formData, setFormData] = useState({
     type: 'income',
-    category: 'Penjualan Grosir',
+    category: 'Penjualan Produk',
     title: '',
     amount: '',
     transaction_date: new Date().toISOString().split('T')[0],
     reference: '',
     notes: '',
   });
+
+  const [categories, setCategories] = useState({
+    income: ['Penjualan Produk', 'Pendapatan Jasa Maklon', 'Pendapatan Lain-lain'],
+    deductions: ['Potongan Penjualan Shopee', 'Potongan Penjualan TikTok', 'Retur Penjualan'],
+    cogs: ['Pembelian Bahan Baku Kain', 'Aksesoris & Perlengkapan Jahit', 'Jasa Jahit & Maklon Luar', 'Biaya Produksi Langsung'],
+    operating_expenses: [],
+    non_operating: []
+  });
+
+  useEffect(() => {
+    fetch('/api/finance-categories')
+      .then(res => res.json())
+      .then(json => {
+        if (json.status === 'success' && json.data) {
+          setCategories(json.data);
+        }
+      })
+      .catch(err => console.error('Error fetching categories:', err));
+  }, []);
 
   const fetchFinance = async () => {
     try {
@@ -62,37 +81,51 @@ export default function KeuanganView({ currentRole }) {
       return;
     }
 
-    setIsModalOpen(false);
-
-    showTimedLoading({
+    showLoading({
       title: 'Mencatat Transaksi Kas...',
       subtitle: `Menyimpan data ${formData.type === 'income' ? 'pemasukan' : 'pengeluaran'} ke pembukuan...`,
-      duration: 1200,
       type: 'finance',
-      successTitle: 'Transaksi Berhasil Dicatat',
-      successSubtitle: 'Saldo kas dan rekapitulasi keuangan telah otomatis diperbarui.',
-      onComplete: async () => {
-        try {
-          await fetch('/api/keuangan', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(formData),
-          });
-          fetchFinance();
-          setFormData({
-            type: 'income',
-            category: 'Penjualan Grosir',
-            title: '',
-            amount: '',
-            transaction_date: new Date().toISOString().split('T')[0],
-            reference: '',
-            notes: '',
-          });
-        } catch (err) {
-          console.error('Error saving transaction:', err);
-        }
-      }
     });
+
+    try {
+      const res = await fetch('/api/keuangan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const json = await res.json();
+      if (res.ok && json.status === 'success') {
+        showSuccess({
+          title: 'Transaksi Berhasil Dicatat',
+          subtitle: 'Saldo kas dan rekapitulasi keuangan telah otomatis diperbarui.',
+          duration: 900,
+          onComplete: () => {
+            setIsModalOpen(false);
+            fetchFinance();
+            setFormData({
+              type: 'income',
+              category: categories.income?.[0] || 'Penjualan Produk',
+              title: '',
+              amount: '',
+              transaction_date: new Date().toISOString().split('T')[0],
+              reference: '',
+              notes: '',
+            });
+          }
+        });
+      } else {
+        hideLoading();
+        alert(json.message || 'Gagal mencatat transaksi keuangan.');
+      }
+    } catch (err) {
+      hideLoading();
+      console.error('Error saving transaction:', err);
+      alert('Terjadi kesalahan jaringan saat menyimpan transaksi.');
+    }
   };
 
   const summary = data?.summary || {
@@ -326,7 +359,7 @@ export default function KeuanganView({ currentRole }) {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, type: 'income', category: 'Penjualan Grosir' })}
+                    onClick={() => setFormData({ ...formData, type: 'income', category: categories.income?.[0] || 'Penjualan Produk' })}
                     className={`py-2.5 rounded-xl font-bold text-sm border transition-all ${
                       formData.type === 'income'
                         ? 'bg-emerald-50 border-emerald-600 text-emerald-800 ring-1 ring-emerald-500'
@@ -337,7 +370,7 @@ export default function KeuanganView({ currentRole }) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, type: 'expense', category: 'Bahan Baku Kain' })}
+                    onClick={() => setFormData({ ...formData, type: 'expense', category: categories.operating_expenses?.[0] || 'Beban Gaji Karyawan' })}
                     className={`py-2.5 rounded-xl font-bold text-sm border transition-all ${
                       formData.type === 'expense'
                         ? 'bg-rose-50 border-rose-600 text-rose-800 ring-1 ring-rose-500'
@@ -361,19 +394,42 @@ export default function KeuanganView({ currentRole }) {
                 >
                   {formData.type === 'income' ? (
                     <>
-                      <option value="Penjualan Grosir">Penjualan Grosir</option>
-                      <option value="Penjualan Retail">Penjualan Retail</option>
-                      <option value="Pendapatan Jasa">Pendapatan Jasa Maklon</option>
-                      <option value="Penerimaan Lainnya">Penerimaan Lainnya</option>
+                      <optgroup label="Pendapatan Usaha">
+                        {categories.income?.map((cat, i) => (
+                          <option key={`inc-${i}`} value={cat}>{cat}</option>
+                        ))}
+                      </optgroup>
+                      {categories.deductions?.length > 0 && (
+                        <optgroup label="Potongan Penjualan & Retur">
+                          {categories.deductions.map((cat, i) => (
+                            <option key={`ded-${i}`} value={cat}>{cat}</option>
+                          ))}
+                        </optgroup>
+                      )}
                     </>
                   ) : (
                     <>
-                      <option value="Bahan Baku Kain">Bahan Baku Kain</option>
-                      <option value="Aksesoris & Benang">Aksesoris & Benang</option>
-                      <option value="Jasa Produksi Sablon/Bordir">Jasa Produksi Sablon/Bordir</option>
-                      <option value="Operasional Workshop & Listrik">Operasional Workshop & Listrik</option>
-                      <option value="Sewa Tempat">Sewa Tempat</option>
-                      <option value="Lain-lain">Lain-lain</option>
+                      {categories.cogs?.length > 0 && (
+                        <optgroup label="Harga Pokok Penjualan (HPP)">
+                          {categories.cogs.map((cat, i) => (
+                            <option key={`cogs-${i}`} value={cat}>{cat}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {categories.operating_expenses?.length > 0 && (
+                        <optgroup label="Biaya Operasional (27 Akun Resmi Excel)">
+                          {categories.operating_expenses.map((cat, i) => (
+                            <option key={`opex-${i}`} value={cat}>{cat}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {categories.non_operating?.length > 0 && (
+                        <optgroup label="Beban Luar Usaha & Pajak">
+                          {categories.non_operating.map((cat, i) => (
+                            <option key={`nonop-${i}`} value={cat}>{cat}</option>
+                          ))}
+                        </optgroup>
+                      )}
                     </>
                   )}
                 </select>
@@ -431,7 +487,7 @@ export default function KeuanganView({ currentRole }) {
                 </label>
                 <input
                   type="text"
-                  placeholder="Contoh: INV-2025-06-88"
+                  placeholder="Contoh: NOTA-001, INV-MKT-01"
                   value={formData.reference}
                   onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"

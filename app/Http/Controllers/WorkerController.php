@@ -4,12 +4,16 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Worker;
+use App\Models\User;
 
 class WorkerController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Worker::query();
+        // Auto-sync users to workers so all registered staff/users are available in Master Pekerja
+        $this->syncUsersWithWorkers();
+
+        $query = Worker::with('user');
 
         // Dynamic Search
         if ($request->filled('search')) {
@@ -54,9 +58,67 @@ class WorkerController extends Controller
         ]);
     }
 
+    public function syncUsers(Request $request)
+    {
+        $count = $this->syncUsersWithWorkers();
+        return response()->json([
+            'status' => 'success',
+            'message' => "Berhasil menyinkronkan {$count} user sistem ke Master Pekerja.",
+        ]);
+    }
+
+    protected function syncUsersWithWorkers(): int
+    {
+        $synced = 0;
+        $users = User::all();
+
+        foreach ($users as $u) {
+            $worker = Worker::withTrashed()->where('user_id', $u->id)->first();
+            if (!$worker) {
+                $workerByName = Worker::withTrashed()->where('name', $u->name)->first();
+                if ($workerByName) {
+                    $workerByName->update(['user_id' => $u->id]);
+                    $synced++;
+                } else {
+                    $lastWorker = Worker::withTrashed()->orderBy('id', 'desc')->first();
+                    $nextId = $lastWorker ? ($lastWorker->id + 1) : 1;
+                    $workerCode = 'PKR-' . str_pad($nextId, 3, '0', STR_PAD_LEFT);
+                    while (Worker::withTrashed()->where('worker_code', $workerCode)->exists()) {
+                        $nextId++;
+                        $workerCode = 'PKR-' . str_pad($nextId, 3, '0', STR_PAD_LEFT);
+                    }
+
+                    $roleLower = strtolower($u->role ?? 'admin');
+                    $isStaff = in_array($roleLower, ['owner', 'admin', 'finance']);
+                    $process = match($roleLower) {
+                        'owner' => 'Owner / Manajemen',
+                        'admin' => 'Admin / Operasional',
+                        'finance' => 'Finance / Kasir',
+                        default => 'Produksi',
+                    };
+
+                    Worker::create([
+                        'user_id' => $u->id,
+                        'worker_code' => $workerCode,
+                        'name' => $u->name,
+                        'type' => $isStaff ? 'Staff' : 'Produksi',
+                        'process' => $process,
+                        'payment_system' => 'Bulanan',
+                        'status' => 'Aktif',
+                        'notes' => 'User sistem (' . ucfirst($u->role ?? 'Admin') . ')',
+                    ]);
+                    $synced++;
+                }
+            }
+        }
+
+        return $synced;
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
+            'user_id' => 'nullable|exists:users,id',
             'name' => 'required|string|max:255',
             'type' => 'required|string|max:100',
             'process' => 'required|string|max:100',
@@ -69,8 +131,13 @@ class WorkerController extends Controller
         $lastWorker = Worker::withTrashed()->orderBy('id', 'desc')->first();
         $nextId = $lastWorker ? ($lastWorker->id + 1) : 1;
         $workerCode = 'PKR-' . str_pad($nextId, 3, '0', STR_PAD_LEFT);
+        while (Worker::withTrashed()->where('worker_code', $workerCode)->exists()) {
+            $nextId++;
+            $workerCode = 'PKR-' . str_pad($nextId, 3, '0', STR_PAD_LEFT);
+        }
 
         $worker = Worker::create([
+            'user_id' => $validated['user_id'] ?? null,
             'worker_code' => $workerCode,
             'name' => $validated['name'],
             'type' => $validated['type'],
@@ -92,6 +159,7 @@ class WorkerController extends Controller
         $worker = Worker::findOrFail($id);
 
         $validated = $request->validate([
+            'user_id' => 'nullable|exists:users,id',
             'name' => 'sometimes|required|string|max:255',
             'type' => 'sometimes|required|string|max:100',
             'process' => 'sometimes|required|string|max:100',

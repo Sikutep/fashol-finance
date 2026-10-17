@@ -22,17 +22,21 @@ export default function PayrollMingguanView({ currentRole }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [selectedPeriod, setSelectedPeriod] = useState('08 - 14 Oktober 2026');
+  const [selectedPeriod, setSelectedPeriod] = useState('');
   const [selectedSlip, setSelectedSlip] = useState(null);
   const [statusOverride, setStatusOverride] = useState(null);
 
   const fetchPayroll = async (periodToFetch = selectedPeriod) => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/payroll-mingguan?period=${encodeURIComponent(periodToFetch)}`);
+      const queryParam = periodToFetch ? `?period=${encodeURIComponent(periodToFetch)}` : '';
+      const res = await fetch(`/api/payroll-mingguan${queryParam}`);
       const json = await res.json();
       if (json.status === 'success') {
         setData(json);
+        if (!periodToFetch && json.period) {
+          setSelectedPeriod(json.period);
+        }
         setStatusOverride(null);
       }
     } catch (e) {
@@ -43,7 +47,7 @@ export default function PayrollMingguanView({ currentRole }) {
   };
 
   useEffect(() => {
-    fetchPayroll(selectedPeriod);
+    fetchPayroll();
   }, []);
 
   const handleAjukan = async () => {
@@ -191,19 +195,19 @@ export default function PayrollMingguanView({ currentRole }) {
                 Siklus Payroll Aktif
               </span>
               <span className="px-3.5 py-1.5 bg-white/10 text-slate-200 font-medium text-xs rounded-full">
-                {data?.period || '12 - 18 Juni 2025'}
+                {data?.period || '-'}
               </span>
             </div>
 
             <div className="flex items-center gap-4 text-slate-300 text-sm">
               <span className="flex items-center gap-1.5">
                 <Calendar className="w-4 h-4 text-emerald-400" />
-                Periode: <strong>12 Jun – 18 Jun 2025</strong>
+                Periode: <strong>{data?.period || '-'}</strong>
               </span>
               <span>•</span>
               <span className="flex items-center gap-1.5">
                 <Clock className="w-4 h-4 text-amber-400" />
-                Jadwal Bayar: <strong>Kamis, 19 Juni 2025</strong>
+                Jadwal Bayar: <strong>{data?.payment_date || '-'}</strong>
               </span>
             </div>
           </div>
@@ -215,7 +219,7 @@ export default function PayrollMingguanView({ currentRole }) {
                 Total Upah Mingguan
               </div>
               <div className="text-3xl sm:text-4xl font-extrabold text-white mt-1">
-                {data?.formatted_total_payroll || 'Rp 755.900'}
+                {data?.formatted_total_payroll || 'Rp 0'}
               </div>
             </div>
 
@@ -259,12 +263,10 @@ export default function PayrollMingguanView({ currentRole }) {
             }}
             className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           >
-            {(data?.available_periods || [
-              '08 - 14 Oktober 2026',
-              '01 - 07 Oktober 2026',
-              '24 - 30 September 2026',
-              '12 - 18 Juni 2025'
-            ]).map((p) => (
+            {(data?.available_periods && data.available_periods.length > 0
+              ? data.available_periods
+              : selectedPeriod ? [selectedPeriod] : []
+            ).map((p) => (
               <option key={p} value={p}>Periode: {p}</option>
             ))}
           </select>

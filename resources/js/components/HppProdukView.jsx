@@ -13,7 +13,8 @@ import {
   ShieldCheck, 
   ChevronRight,
   Sparkles,
-  Edit3
+  Edit3,
+  X
 } from 'lucide-react';
 import { useLoading } from '../context/LoadingContext';
 
@@ -23,6 +24,11 @@ export default function HppProdukView({ currentRole }) {
   const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [search, setSearch] = useState('');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    material_cost: 0,
+    overhead_cost: 0,
+  });
 
   const fetchHppData = async () => {
     try {
@@ -82,6 +88,57 @@ export default function HppProdukView({ currentRole }) {
     } catch (e) {
       hideLoading();
       console.error(e);
+      alert('Terjadi kesalahan jaringan.');
+    }
+  };
+
+  const handleOpenEditModal = () => {
+    if (!selectedProduct) return;
+    setEditFormData({
+      material_cost: selectedProduct.material_cost || 0,
+      overhead_cost: selectedProduct.overhead_cost || 0,
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveHppItem = async (e) => {
+    e.preventDefault();
+    if (!selectedProduct) return;
+
+    showLoading({
+      title: 'Menyimpan Standar Biaya HPP...',
+      subtitle: `Memperbarui komponen biaya untuk ${selectedProduct.name}...`,
+      type: 'production',
+    });
+
+    try {
+      const res = await fetch(`/api/hpp-produk/${selectedProduct.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(editFormData),
+      });
+
+      const json = await res.json();
+      if (res.ok && json.status === 'success') {
+        showSuccess({
+          title: 'HPP Berhasil Diperbarui',
+          subtitle: `Standar HPP ${selectedProduct.name} telah disimpan.`,
+          duration: 850,
+          onComplete: () => {
+            setIsEditModalOpen(false);
+            fetchHppData();
+          }
+        });
+      } else {
+        hideLoading();
+        alert(json.message || 'Gagal memperbarui komponen HPP.');
+      }
+    } catch (err) {
+      hideLoading();
+      console.error(err);
       alert('Terjadi kesalahan jaringan.');
     }
   };
@@ -203,14 +260,26 @@ export default function HppProdukView({ currentRole }) {
                       </h2>
                     </div>
 
-                    <div className="bg-white/10 backdrop-blur-md px-5 py-3 rounded-xl border border-white/15 text-right">
-                      <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                        Harga Pokok Produksi (HPP)
+                    <div className="flex flex-col items-end gap-2.5">
+                      <div className="bg-white/10 backdrop-blur-md px-5 py-3 rounded-xl border border-white/15 text-right">
+                        <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                          Harga Pokok Produksi (HPP)
+                        </div>
+                        <div className="text-3xl font-extrabold text-white mt-0.5">
+                          {selectedProduct.formatted_total_hpp}
+                          <span className="text-xs font-normal text-slate-300 ml-1">/ pcs</span>
+                        </div>
                       </div>
-                      <div className="text-3xl font-extrabold text-white mt-0.5">
-                        {selectedProduct.formatted_total_hpp}
-                        <span className="text-xs font-normal text-slate-300 ml-1">/ pcs</span>
-                      </div>
+
+                      {currentRole === 'owner' && (
+                        <button
+                          onClick={handleOpenEditModal}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/30 hover:bg-emerald-500/50 text-white text-xs font-bold border border-emerald-400/40 transition-colors shadow-xs"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-emerald-300" />
+                          <span>Edit Komponen HPP</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -304,6 +373,121 @@ export default function HppProdukView({ currentRole }) {
           )}
         </div>
       </div>
+
+      {/* Modal Edit Komponen HPP */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-xs">
+          <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden transform transition-all animate-scaleUp">
+            
+            {/* Modal Header */}
+            <div className="px-8 py-6 border-b border-slate-100 flex items-start justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">
+                  Edit Standar Biaya HPP
+                </h3>
+                <p className="text-sm text-slate-400 mt-1">
+                  Atur komponen biaya bahan baku dan overhead untuk <strong>{selectedProduct?.name}</strong>.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSaveHppItem} className="p-8 space-y-5">
+              {/* Bahan Baku */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Biaya Bahan Baku & Material (Rp)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="500"
+                  value={editFormData.material_cost}
+                  onChange={(e) => setEditFormData({ ...editFormData, material_cost: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600 font-semibold"
+                  required
+                />
+              </div>
+
+              {/* Tenaga Kerja (Readonly dari Proses) */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-semibold text-slate-700">
+                    Biaya Upah Tenaga Kerja Langsung (Rp)
+                  </label>
+                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    Otomatis dari Master Proses
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  readOnly
+                  disabled
+                  value={`Rp ${Number(selectedProduct?.labor_cost || 0).toLocaleString('id-ID')}`}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-100 text-sm text-slate-500 font-semibold cursor-not-allowed"
+                />
+                <p className="text-xs text-slate-400 mt-1">
+                  Total akumulasi seluruh tarif proses aktif (Potong + Jahit + Kansay + QC + Packing) di modul Master Proses.
+                </p>
+              </div>
+
+              {/* Overhead */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Biaya Overhead & Lainnya (Rp)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="500"
+                  value={editFormData.overhead_cost}
+                  onChange={(e) => setEditFormData({ ...editFormData, overhead_cost: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600 font-semibold"
+                  required
+                />
+              </div>
+
+              {/* Live Calculated Total HPP */}
+              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-emerald-800 uppercase tracking-wider">
+                    Total HPP Baru
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    Bahan + Upah Proses + Overhead
+                  </div>
+                </div>
+                <div className="text-2xl font-extrabold text-emerald-900">
+                  Rp {(Number(editFormData.material_cost || 0) + Number(selectedProduct?.labor_cost || 0) + Number(editFormData.overhead_cost || 0)).toLocaleString('id-ID')}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-[#15352A] hover:bg-[#102920] active:scale-95 text-sm font-bold text-white shadow-sm transition-all"
+                >
+                  Simpan Komponen HPP
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

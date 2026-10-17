@@ -19,8 +19,11 @@ import { useLoading } from '../context/LoadingContext';
 export default function RekapBiayaProduksiView({ currentRole }) {
   const { showTimedLoading } = useLoading();
   const [data, setData] = useState(null);
+  const [availablePeriods, setAvailablePeriods] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState('Juni 2025');
+  const [period, setPeriod] = useState(() => {
+    return new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(new Date());
+  });
 
   const fetchSummary = async () => {
     try {
@@ -29,6 +32,9 @@ export default function RekapBiayaProduksiView({ currentRole }) {
       const json = await res.json();
       if (json.status === 'success') {
         setData(json);
+        if (json.available_periods && json.available_periods.length > 0) {
+          setAvailablePeriods(json.available_periods);
+        }
       }
     } catch (e) {
       console.error('Error fetching production cost summary:', e);
@@ -147,10 +153,10 @@ export default function RekapBiayaProduksiView({ currentRole }) {
             <div className="bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/10">
               <div className="text-xs text-slate-300 font-medium">Kesesuaian Terhadap Standar HPP</div>
               <div className="text-2xl font-extrabold text-teal-300 mt-1">
-                {summary.formatted_efficiency || (summary.efficiency_percentage ? `${summary.efficiency_percentage}% efisien` : '98.4% efisien')}
+                {summary.formatted_efficiency || (summary.efficiency_percentage ? `${summary.efficiency_percentage}% efisien` : '-')}
               </div>
               <div className="text-[11px] text-slate-400 mt-1">
-                Target: {summary.formatted_target_avg_hpp || 'Rp 50.000'} / pcs
+                Target: {summary.formatted_target_avg_hpp || '-'}
               </div>
             </div>
           </div>
@@ -175,9 +181,9 @@ export default function RekapBiayaProduksiView({ currentRole }) {
             aria-label="Pilih Periode Rekap Biaya"
             className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           >
-            <option value="Juni 2025">Periode: Juni 2025</option>
-            <option value="Mei 2025">Periode: Mei 2025</option>
-            <option value="April 2025">Periode: April 2025</option>
+            {(availablePeriods.length > 0 ? availablePeriods : [period]).map((p) => (
+              <option key={p} value={p}>Periode: {p}</option>
+            ))}
           </select>
         </div>
 

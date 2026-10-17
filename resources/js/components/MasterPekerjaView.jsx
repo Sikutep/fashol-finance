@@ -8,7 +8,8 @@ import {
   X, 
   Check, 
   ChevronLeft, 
-  ChevronRight
+  ChevronRight,
+  RefreshCw
 } from 'lucide-react';
 import { useLoading } from '../context/LoadingContext';
 
@@ -21,16 +22,31 @@ export default function MasterPekerjaView({ currentRole }) {
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingWorker, setEditingWorker] = useState(null);
+  const [availableProcesses, setAvailableProcesses] = useState([]);
 
   // Form State
   const [formData, setFormData] = useState({
     name: '',
     type: 'Produksi',
-    process: 'Jahit Luar',
+    process: '',
     payment_system: 'Borongan',
     status: 'Aktif',
     notes: '',
   });
+
+  useEffect(() => {
+    fetch('/api/references/options')
+      .then(res => res.json())
+      .then(json => {
+        if (json.status === 'success' && json.processes) {
+          setAvailableProcesses(json.processes);
+          if (!formData.process && json.processes.length > 0) {
+            setFormData(prev => ({ ...prev, process: json.processes[0] }));
+          }
+        }
+      })
+      .catch(err => console.error('Gagal memuat opsi referensi:', err));
+  }, []);
 
   const fetchWorkers = async () => {
     try {
@@ -60,7 +76,7 @@ export default function MasterPekerjaView({ currentRole }) {
     setFormData({
       name: '',
       type: 'Produksi',
-      process: 'Jahit Luar',
+      process: availableProcesses[0] || '',
       payment_system: 'Borongan',
       status: 'Aktif',
       notes: '',
@@ -178,6 +194,39 @@ export default function MasterPekerjaView({ currentRole }) {
     document.body.removeChild(link);
   };
 
+  const handleSyncUsers = async () => {
+    showLoading({
+      title: 'Sinkronisasi Akun User...',
+      subtitle: 'Memetakan seluruh akun user sistem ke Master Pekerja...',
+      type: 'finance',
+    });
+
+    try {
+      const res = await fetch('/api/workers/sync-users', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' },
+      });
+      const json = await res.json();
+      if (res.ok && json.status === 'success') {
+        showSuccess({
+          title: 'Sinkronisasi Selesai!',
+          subtitle: json.message,
+          duration: 900,
+          onComplete: () => {
+            fetchWorkers();
+          }
+        });
+      } else {
+        hideLoading();
+        alert(json.message || 'Gagal sinkronisasi akun.');
+      }
+    } catch (e) {
+      hideLoading();
+      console.error(e);
+      alert('Terjadi kesalahan jaringan.');
+    }
+  };
+
   return (
     <div className="space-y-8">
       
@@ -191,11 +240,19 @@ export default function MasterPekerjaView({ currentRole }) {
             Master Pekerja
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Kelola identitas, bagian, dan sistem pembayaran pekerja.
+            Kelola identitas, bagian, dan sistem pembayaran seluruh pekerja dan staf.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleSyncUsers}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-sm font-bold text-emerald-800 shadow-xs transition-colors"
+            title="Sinkronkan akun login Users menjadi Master Pekerja"
+          >
+            <RefreshCw className="w-4 h-4 text-emerald-700" />
+            <span>Sinkronkan User</span>
+          </button>
           <button
             onClick={handleExportCSV}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-700 shadow-xs transition-colors"
@@ -282,7 +339,19 @@ export default function MasterPekerjaView({ currentRole }) {
                           <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
                             {initials}
                           </div>
-                          <span className="font-bold text-slate-900">{worker.name}</span>
+                          <div>
+                            <div className="font-bold text-slate-900 flex items-center gap-2">
+                              <span>{worker.name}</span>
+                              {worker.user_id && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  User Sistem
+                                </span>
+                              )}
+                            </div>
+                            {worker.notes && (
+                              <div className="text-xs text-slate-400 mt-0.5">{worker.notes}</div>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="py-4 px-6 text-slate-600 font-medium">
@@ -425,12 +494,19 @@ export default function MasterPekerjaView({ currentRole }) {
                     onChange={(e) => setFormData({ ...formData, process: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600"
                   >
-                    <option value="Jahit Luar">Jahit Luar</option>
-                    <option value="Potong">Potong</option>
-                    <option value="Kansay">Kansay</option>
-                    <option value="QC">QC</option>
-                    <option value="Packing">Packing</option>
-                    <option value="Finance">Finance</option>
+                    {formData.type === 'Staff' ? (
+                      <>
+                        <option value="Owner / Manajemen">Owner / Manajemen</option>
+                        <option value="Finance / Kasir">Finance / Kasir</option>
+                        <option value="Admin / Operasional">Admin / Operasional</option>
+                      </>
+                    ) : (
+                      <>
+                        {availableProcesses.map((p, idx) => (
+                          <option key={idx} value={p}>{p}</option>
+                        ))}
+                      </>
+                    )}
                   </select>
                 </div>
 
