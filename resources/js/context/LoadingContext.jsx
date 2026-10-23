@@ -51,6 +51,22 @@ export function LoadingProvider({ children }) {
     }, options.duration || 850);
   }, [hideLoading]);
 
+  // Transition to error state with dismiss button
+  const showError = useCallback((options = {}) => {
+    const title = typeof options === 'string' ? 'Perhatian / Terjadi Kesalahan' : (options.title || 'Perhatian / Terjadi Kesalahan');
+    const subtitle = typeof options === 'string' ? options : (options.subtitle || 'Permintaan tidak dapat diproses. Silakan periksa kembali form isian.');
+
+    setModalState(prev => ({
+      ...prev,
+      isOpen: true,
+      status: 'error',
+      title,
+      subtitle,
+      progress: null,
+      canClose: true,
+    }));
+  }, []);
+
   // Timed Loading helper (e.g. 2.5s simulated loading)
   const showTimedLoading = useCallback((options = {}) => {
     const duration = options.duration || 2500;
@@ -147,14 +163,16 @@ export function LoadingProvider({ children }) {
       window.hideLoadingPopup = hideLoading;
       window.showTimedLoading = showTimedLoading;
       window.showMultiStepLoading = showMultiStepLoading;
+      window.showErrorPopup = showError;
     }
-  }, [showLoading, hideLoading, showTimedLoading, showMultiStepLoading]);
+  }, [showLoading, hideLoading, showTimedLoading, showMultiStepLoading, showError]);
 
   return (
     <LoadingContext.Provider
       value={{
         showLoading,
         showSuccess,
+        showError,
         hideLoading,
         showTimedLoading,
         showMultiStepLoading,

@@ -3,20 +3,25 @@ import { Lock, Mail, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle } from 'l
 import { useLoading } from '../context/LoadingContext';
 
 export default function LoginPage({ onLoginSuccess }) {
-  const { showTimedLoading, showLoading } = useLoading();
+  const { showTimedLoading } = useLoading();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     setErrorMsg('');
 
     if (!email || !password) {
       setErrorMsg('Harap masukkan email dan password.');
       return;
     }
+
+    setIsSubmitting(true);
 
     try {
       const res = await fetch('/api/auth/login', {
@@ -31,6 +36,10 @@ export default function LoginPage({ onLoginSuccess }) {
       const json = await res.json();
 
       if (json.status === 'success') {
+        if (json.csrf_token) {
+          const meta = document.querySelector('meta[name="csrf-token"]');
+          if (meta) meta.setAttribute('content', json.csrf_token);
+        }
         showTimedLoading({
           title: 'Memverifikasi Akun...',
           subtitle: `Menyiapkan sesi untuk ${json.user.name}...`,
@@ -44,9 +53,11 @@ export default function LoginPage({ onLoginSuccess }) {
         });
       } else {
         setErrorMsg(json.message || 'Email atau password salah.');
+        setIsSubmitting(false);
       }
     } catch (err) {
       setErrorMsg('Gagal terhubung ke server.');
+      setIsSubmitting(false);
     }
   };
 
@@ -138,10 +149,24 @@ export default function LoginPage({ onLoginSuccess }) {
           {/* Submit Button */}
           <button
             type="submit"
-            className="w-full py-3.5 px-6 rounded-xl bg-[#15352A] hover:bg-[#102920] text-white font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2 mt-2"
+            disabled={isSubmitting}
+            className={`w-full py-3.5 px-6 rounded-xl font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2 mt-2 ${
+              isSubmitting
+                ? 'bg-slate-400 cursor-not-allowed text-white'
+                : 'bg-[#15352A] hover:bg-[#102920] text-white active:scale-[0.99]'
+            }`}
           >
-            <span>Masuk Sekarang</span>
-            <ArrowRight className="w-4 h-4" />
+            {isSubmitting ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Memproses...</span>
+              </>
+            ) : (
+              <>
+                <span>Masuk Sekarang</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </button>
         </form>
 

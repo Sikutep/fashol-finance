@@ -10,8 +10,10 @@ class WorkerController extends Controller
 {
     public function index(Request $request)
     {
-        // Auto-sync users to workers so all registered staff/users are available in Master Pekerja
-        $this->syncUsersWithWorkers();
+        // Auto-sync users to workers only if master worker table is empty (or via explicit /api/workers/sync-users)
+        if (Worker::count() === 0) {
+            $this->syncUsersWithWorkers();
+        }
 
         $query = Worker::with('user');
 
@@ -36,7 +38,7 @@ class WorkerController extends Controller
             $query->where('payment_system', $request->payment_system);
         }
 
-        $perPage = $request->input('per_page', 10);
+        $perPage = min(100, max(5, (int) $request->input('per_page', 10)));
         $workers = $query->orderBy('id', 'asc')->paginate($perPage);
 
         return response()->json([
@@ -123,6 +125,7 @@ class WorkerController extends Controller
             'type' => 'required|string|max:100',
             'process' => 'required|string|max:100',
             'payment_system' => 'required|in:Borongan,Harian,Bulanan',
+            'default_salary' => 'nullable|numeric|min:0',
             'status' => 'required|in:Aktif,Nonaktif',
             'notes' => 'nullable|string',
         ]);
@@ -143,6 +146,7 @@ class WorkerController extends Controller
             'type' => $validated['type'],
             'process' => $validated['process'],
             'payment_system' => $validated['payment_system'],
+            'default_salary' => $validated['default_salary'] ?? 0,
             'status' => $validated['status'],
             'notes' => $validated['notes'] ?? null,
         ]);
@@ -164,6 +168,7 @@ class WorkerController extends Controller
             'type' => 'sometimes|required|string|max:100',
             'process' => 'sometimes|required|string|max:100',
             'payment_system' => 'sometimes|required|in:Borongan,Harian,Bulanan',
+            'default_salary' => 'nullable|numeric|min:0',
             'status' => 'sometimes|required|in:Aktif,Nonaktif',
             'notes' => 'nullable|string',
         ]);
@@ -181,13 +186,13 @@ class WorkerController extends Controller
     {
         $worker = Worker::findOrFail($id);
 
-        // Check if worker already has transactions
-        if ($worker->dailyProductions()->exists()) {
+        // Check if worker already has transactions or payroll history
+        if ($worker->dailyProductions()->exists() || $worker->monthlyPayrolls()->exists()) {
             // Keep history intact, soft delete only
             $worker->delete();
             return response()->json([
                 'status' => 'success',
-                'message' => 'Pekerja dinonaktifkan / diarsipkan untuk menjaga histori transaksi.',
+                'message' => 'Pekerja dinonaktifkan / diarsipkan untuk menjaga histori transaksi dan penggajian.',
             ]);
         }
 

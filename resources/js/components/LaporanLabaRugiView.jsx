@@ -12,14 +12,18 @@ import {
   Building,
   RefreshCw,
   PieChart,
-  Tag
+  Tag,
+  Download
 } from 'lucide-react';
 import { useLoading } from '../context/LoadingContext';
+import PrintReportModal from './PrintReportModal';
+import { exportToExcel } from '../utils/exportUtils';
 
-export default function LaporanLabaRugiView({ currentRole }) {
+export default function LaporanLabaRugiView({ currentRole, onNavigate }) {
   const { showLoading, showSuccess, hideLoading } = useLoading();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isReportPrintOpen, setIsReportPrintOpen] = useState(false);
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -88,6 +92,63 @@ export default function LaporanLabaRugiView({ currentRole }) {
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       
+      {/* 7 SPK Reports Navigation Hub */}
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2 py-0.5 mb-1.5">
+          Pusat Laporan Finance (7 Laporan SPK)
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#15352A] text-white shadow-xs"
+          >
+            1. Laba Rugi Operasional (Aktif)
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate && onNavigate('biaya-produksi')}
+            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+          >
+            2. Rekap Biaya Produksi
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate && onNavigate('payroll-mingguan')}
+            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+          >
+            3. Rekap Payroll Mingguan
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate && onNavigate('payroll-bulanan')}
+            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+          >
+            4. Rekap Payroll Bulanan
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate && onNavigate('keuangan')}
+            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+          >
+            5. Kas Masuk & Kas Keluar
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate && onNavigate('keuangan')}
+            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+          >
+            6. Rekap Beban Operasional
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate && onNavigate('hpp-produk')}
+            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+          >
+            7. Rekap HPP Produk
+          </button>
+        </div>
+      </div>
+      
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
         <div>
@@ -128,11 +189,54 @@ export default function LaporanLabaRugiView({ currentRole }) {
           </div>
 
           <button
-            onClick={() => window.print()}
+            onClick={() => setIsReportPrintOpen(true)}
             className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl shadow-sm transition-all flex items-center gap-2 text-sm"
           >
             <Printer className="w-4 h-4" />
             <span className="hidden sm:inline">Cetak Laporan</span>
+          </button>
+
+          <button
+            onClick={() => {
+              const opRows = (data?.operating_expenses || []).map((item, idx) => ({
+                no: idx + 1,
+                account: item.account,
+                amount: item.formatted_amount,
+              }));
+              exportToExcel({
+                filename: `Laporan_Laba_Rugi_${data?.period?.replace(/[\/\s:]/g, '_') || 'Laba_Rugi'}`,
+                sheetName: 'Laba Rugi',
+                title: 'CV FASHOL MITSLI SEE — LAPORAN LABA RUGI OPERASIONAL',
+                subtitle: `Periode: ${data?.period} | Pendapatan Bersih: ${summary.formatted_net_sales} | Laba Bersih: ${summary.formatted_net_profit}`,
+                columns: [
+                  { header: 'No', key: 'no', align: 'center' },
+                  { header: 'Pos Rekening Keuangan / Biaya Operasional', key: 'account' },
+                  { header: 'Nominal', key: 'amount', align: 'right' },
+                ],
+                data: [
+                  { no: '1', account: 'Penjualan Produk (Gross)', amount: summary.formatted_gross_sales },
+                  { no: '', account: 'Retur Penjualan', amount: summary.sales_returns > 0 ? `(${summary.formatted_sales_returns})` : 'Rp 0' },
+                  { no: '', account: 'Potongan Penjualan / Biaya Marketplace', amount: summary.sales_discounts > 0 ? `(${summary.formatted_sales_discounts})` : 'Rp 0' },
+                  { no: '', account: 'JUMLAH PENDAPATAN BERSIH', amount: summary.formatted_net_sales },
+                  { no: '2', account: 'Harga Pokok Penjualan (HPP)', amount: summary.formatted_cogs },
+                  { no: '', account: 'LABA KOTOR (GROSS PROFIT)', amount: summary.formatted_gross_profit },
+                  ...opRows,
+                  { no: '', account: 'JUMLAH BIAYA OPERASIONAL', amount: summary.formatted_total_operating_expenses },
+                  { no: '', account: 'LABA (RUGI) OPERASIONAL', amount: summary.formatted_operating_profit },
+                  { no: '4', account: 'Pendapatan Lain-lain', amount: summary.formatted_other_income },
+                  ...(data?.non_operating_expenses || []).map((item, idx) => ({
+                    no: '',
+                    account: item.account,
+                    amount: item.formatted_amount,
+                  })),
+                  { no: '', account: 'LABA (RUGI) BERSIH', amount: summary.formatted_net_profit },
+                ],
+              });
+            }}
+            className="px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold rounded-xl shadow-sm transition-all flex items-center gap-2 text-sm"
+          >
+            <Download className="w-4 h-4 text-emerald-600" />
+            <span className="hidden sm:inline">Ekspor Excel</span>
           </button>
         </div>
       </div>
@@ -292,8 +396,13 @@ export default function LaporanLabaRugiView({ currentRole }) {
                     item.amount > 0 ? 'bg-white border border-slate-200/80 my-0.5' : 'text-slate-400'
                   }`}
                 >
-                  <span className="font-medium text-slate-700 truncate pr-2">
-                    {item.account}
+                  <span className="font-medium text-slate-700 truncate pr-2 flex items-center gap-1.5">
+                    <span>{item.account}</span>
+                    {item.account === 'Beban Gaji Karyawan' && item.amount > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold" title="Terintegrasi otomatis dari modul Payroll Bulanan">
+                        Modul Payroll
+                      </span>
+                    )}
                   </span>
                   <span className={`font-semibold shrink-0 ${item.amount > 10000000 ? 'text-rose-700 font-bold' : 'text-slate-900'}`}>
                     {item.formatted_amount}
@@ -351,6 +460,44 @@ export default function LaporanLabaRugiView({ currentRole }) {
 
         </div>
       </div>
+
+      {/* Print Report Modal */}
+      <PrintReportModal
+        isOpen={isReportPrintOpen}
+        onClose={() => setIsReportPrintOpen(false)}
+        title="Laporan Laba Rugi Operasional"
+        subtitle={`Pembukuan resmi pendapatan bersih, HPP, dan 27 akun operasional | Laba Bersih: ${summary.formatted_net_profit}`}
+        period={data?.period || 'Periode Aktif'}
+        orientation="portrait"
+        excelFilename="laporan_laba_rugi"
+        columns={[
+          { header: 'No', key: 'no', align: 'center' },
+          { header: 'Pos Rekening Keuangan / Beban Operasional', key: 'account' },
+          { header: 'Nominal', key: 'amount', align: 'right' },
+        ]}
+        data={[
+          { no: '1', account: 'Penjualan Produk (Gross)', amount: summary.formatted_gross_sales },
+          { no: '', account: 'Retur Penjualan', amount: summary.sales_returns > 0 ? `(${summary.formatted_sales_returns})` : 'Rp 0' },
+          { no: '', account: 'Potongan Penjualan / Biaya Marketplace', amount: summary.sales_discounts > 0 ? `(${summary.formatted_sales_discounts})` : 'Rp 0' },
+          { no: '', account: 'JUMLAH PENDAPATAN BERSIH', amount: summary.formatted_net_sales },
+          { no: '2', account: 'Harga Pokok Penjualan (HPP)', amount: summary.formatted_cogs },
+          { no: '', account: 'LABA KOTOR (GROSS PROFIT)', amount: summary.formatted_gross_profit },
+          ...(data?.operating_expenses || []).map((item, idx) => ({
+            no: idx + 1,
+            account: item.account,
+            amount: item.formatted_amount,
+          })),
+          { no: '', account: 'JUMLAH BIAYA OPERASIONAL', amount: summary.formatted_total_operating_expenses },
+          { no: '', account: 'LABA (RUGI) OPERASIONAL', amount: summary.formatted_operating_profit },
+          { no: '4', account: 'Pendapatan Lain-lain', amount: summary.formatted_other_income },
+          ...(data?.non_operating_expenses || []).map((item, idx) => ({
+            no: '',
+            account: item.account,
+            amount: item.formatted_amount,
+          })),
+          { no: '', account: 'LABA (RUGI) BERSIH', amount: summary.formatted_net_profit },
+        ]}
+      />
     </div>
   );
 }

@@ -17,8 +17,13 @@ class Worker extends Model
         'type',
         'process',
         'payment_system',
+        'default_salary',
         'status',
         'notes',
+    ];
+
+    protected $casts = [
+        'default_salary' => 'float',
     ];
 
     public function user()
@@ -29,5 +34,10 @@ class Worker extends Model
     public function dailyProductions()
     {
         return $this->hasMany(DailyProduction::class);
+    }
+
+    public function monthlyPayrolls()
+    {
+        return $this->hasMany(MonthlyPayroll::class);
     }
 }

@@ -13,10 +13,12 @@ Route::prefix('api')->group(function () {
     // Public Auth endpoints
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
-    Route::post('/auth/logout', [AuthController::class, 'logout']);
 
     // Protected Operational Endpoints (Requires Authenticated Session)
     Route::middleware('auth')->group(function () {
+        // Authenticated Logout
+        Route::post('/auth/logout', [AuthController::class, 'logout']);
+
         // Dashboard Finance
         Route::get('/dashboard', [DashboardController::class, 'index']);
 
@@ -36,7 +38,13 @@ Route::prefix('api')->group(function () {
         Route::get('/references/options', [ReferenceController::class, 'getOptions']);
         Route::get('/references/rate', [ReferenceController::class, 'getRate']);
 
-        // Master Proses Pekerjaan & Tarif (Modul 1 & 6)
+        // Master Proses Standar (Katalog Proses Pabrik)
+        Route::get('/production-processes', [ReferenceController::class, 'getProductionProcesses']);
+        Route::post('/production-processes', [ReferenceController::class, 'storeProductionProcess']);
+        Route::put('/production-processes/{id}', [ReferenceController::class, 'updateProductionProcess']);
+        Route::delete('/production-processes/{id}', [ReferenceController::class, 'destroyProductionProcess']);
+
+        // Tarif Pekerjaan per Produk (Modul 1 & 6)
         Route::get('/master-proses', [ReferenceController::class, 'getProcessRates']);
         Route::post('/master-proses', [ReferenceController::class, 'storeProcessRate']);
         Route::put('/master-proses/{id}', [ReferenceController::class, 'updateProcessRate']);
@@ -48,6 +56,8 @@ Route::prefix('api')->group(function () {
 
         Route::get('/payroll-bulanan', [FinanceExtendedController::class, 'getMonthlyPayroll']);
         Route::post('/payroll-bulanan/{id}/status', [FinanceExtendedController::class, 'updateMonthlyPayrollStatus']);
+        Route::put('/payroll-bulanan/{id}', [FinanceExtendedController::class, 'updateMonthlyPayrollItem']);
+        Route::post('/payroll-bulanan/{id}', [FinanceExtendedController::class, 'updateMonthlyPayrollItem']);
 
         Route::get('/hpp-produk', [FinanceExtendedController::class, 'getHppProducts']);
         Route::post('/hpp-produk/status', [FinanceExtendedController::class, 'updateHppStatus']);
@@ -56,11 +66,23 @@ Route::prefix('api')->group(function () {
 
         Route::get('/keuangan', [FinanceExtendedController::class, 'getFinanceTransactions']);
         Route::post('/keuangan', [FinanceExtendedController::class, 'storeFinanceTransaction']);
+        Route::put('/keuangan/{id}', [FinanceExtendedController::class, 'updateFinanceTransaction']);
+        Route::delete('/keuangan/{id}', [FinanceExtendedController::class, 'destroyFinanceTransaction']);
         Route::get('/finance-categories', [FinanceExtendedController::class, 'getFinanceCategories']);
 
         Route::get('/laporan-laba-rugi', [FinanceExtendedController::class, 'getIncomeStatement']);
 
         Route::get('/rekap-biaya-produksi', [FinanceExtendedController::class, 'getProductionCostSummary']);
+
+        // Export Endpoints (Excel / CSV) with Rate Limiting (30 requests / minute)
+        Route::middleware('throttle:30,1')->group(function () {
+            Route::get('/export/payroll-mingguan', [FinanceExtendedController::class, 'exportWeeklyPayroll']);
+            Route::get('/export/payroll-bulanan', [FinanceExtendedController::class, 'exportMonthlyPayroll']);
+            Route::get('/export/keuangan', [FinanceExtendedController::class, 'exportFinanceTransactions']);
+            Route::get('/export/rekap-biaya-produksi', [FinanceExtendedController::class, 'exportProductionCost']);
+            Route::get('/export/laporan-laba-rugi', [FinanceExtendedController::class, 'exportIncomeStatement']);
+            Route::get('/export/produksi-harian', [DailyProductionController::class, 'exportDailyProduction']);
+        });
     });
 });
 

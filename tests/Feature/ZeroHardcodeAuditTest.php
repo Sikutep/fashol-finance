@@ -33,7 +33,7 @@ class ZeroHardcodeAuditTest extends TestCase
      */
     public function test_daily_production_dynamic_product_group_matching_without_hardcoded_names(): void
     {
-        $worker = Worker::where('status', 'Aktif')->first();
+        $worker = Worker::where('status', 'Aktif')->where('payment_system', 'Borongan')->first();
         $this->assertNotNull($worker);
 
         // Ambil grup produk yang ada di database

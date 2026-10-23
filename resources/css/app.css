@@ -29,3 +29,52 @@
     animation: pulseGlow 2.5s ease-in-out infinite;
 }
 
+/* Hilangkan spinner up/down bawaan browser agar input angka bersih, rapi, dan modern */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+/* Print Styles & Media Directives */
+@media print {
+    body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        font-size: 11pt !important;
+    }
+
+    aside,
+    nav,
+    header,
+    .no-print,
+    button:not(.allow-print),
+    input[type='text'],
+    input[type='search'],
+    select,
+    .fixed.inset-0.bg-slate-900\/60,
+    .fixed.inset-0.bg-slate-900\/75 {
+        display: none !important;
+    }
+
+    .page-break {
+        page-break-after: always !important;
+        break-after: page !important;
+    }
+
+    .print-only {
+        display: block !important;
+    }
+
+    /* Print color fidelity */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+}
+

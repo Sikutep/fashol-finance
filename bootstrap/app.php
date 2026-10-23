@@ -12,7 +12,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->validateCsrfTokens(except: [
-            'api/*',
+            'api/auth/login',
         ]);
         $middleware->redirectGuestsTo(fn ($request) => $request->is('api/*') ? null : '/');
     })

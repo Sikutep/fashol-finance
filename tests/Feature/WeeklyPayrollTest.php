@@ -86,4 +86,51 @@ class WeeklyPayrollTest extends TestCase
                 'new_status' => 'Diperiksa',
             ]);
     }
+
+    public function test_weekly_payroll_status_lifecycle_and_labels(): void
+    {
+        $worker = Worker::where('status', 'Aktif')->firstOrFail();
+
+        // 1. Initially recorded as Tercatat (Draft)
+        DailyProduction::create([
+            'transaction_number' => 'PRD-TEST-STATUS01',
+            'production_date' => '2026-10-15',
+            'worker_id' => $worker->id,
+            'process_name' => 'Potong',
+            'total_qty' => 10,
+            'total_wage' => 3500,
+            'status' => 'Tercatat',
+        ]);
+
+        $resGetDraft = $this->actingAs($this->user)->getJson('/api/payroll-mingguan?period=15%20-%2021%20Oktober%202026');
+        $resGetDraft->assertStatus(200);
+        $this->assertEquals('Draft', $resGetDraft->json('payroll_status'));
+        $this->assertEquals('Draft Pengajuan', $resGetDraft->json('status_label'));
+
+        // 2. Admin submits to Owner (Diperiksa)
+        $admin = User::where('role', 'admin')->firstOrFail();
+        $resSubmit = $this->actingAs($admin)->postJson('/api/payroll-mingguan/status', [
+            'period' => '15 - 21 Oktober 2026',
+            'start_date' => '2026-10-15',
+            'end_date' => '2026-10-21',
+            'status' => 'Diperiksa',
+        ]);
+        $resSubmit->assertStatus(200)->assertJson(['status' => 'success', 'new_status' => 'Diperiksa']);
+
+        // Check subsequent GET
+        $resGetSubmitted = $this->actingAs($this->user)->getJson('/api/payroll-mingguan?period=15%20-%2021%20Oktober%202026');
+        $this->assertEquals('Diperiksa', $resGetSubmitted->json('payroll_status'));
+        $this->assertEquals('Diajukan (Menunggu Persetujuan Owner)', $resGetSubmitted->json('status_label'));
+
+        // 3. Owner approves (Disetujui)
+        $resApprove = $this->actingAs($this->user)->postJson('/api/payroll-mingguan/status', [
+            'period' => '15 - 21 Oktober 2026',
+            'status' => 'Disetujui',
+        ]);
+        $resApprove->assertStatus(200)->assertJson(['status' => 'success', 'new_status' => 'Disetujui']);
+
+        $resGetApproved = $this->actingAs($this->user)->getJson('/api/payroll-mingguan?period=15%20-%2021%20Oktober%202026');
+        $this->assertEquals('Disetujui', $resGetApproved->json('payroll_status'));
+        $this->assertEquals('Telah disetujui Owner', $resGetApproved->json('status_label'));
+    }
 }

@@ -141,13 +141,13 @@ class FinanceErpSeeder extends Seeder
             );
         }
 
-        // 4. Seed Data Riil Transaksi Keuangan (Agustus & September 2026 dari LAPORAN LABA RUGI.xlsx)
-        FinanceTransaction::whereBetween('transaction_date', ['2026-08-01', '2026-09-30'])->delete();
+        // 4. Seed Data Riil Transaksi Keuangan (Agustus, September & Oktober 2026)
+        FinanceTransaction::whereBetween('transaction_date', ['2026-08-01', '2026-10-31'])->delete();
         $this->seedLabaRugiTransactions($adminUser?->id);
     }
 
     /**
-     * Memasukkan data transaksi riil pembukuan Agustus & September 2026
+     * Memasukkan data transaksi riil pembukuan Agustus, September & Oktober 2026
      * dari file LAPORAN LABA RUGI.xlsx untuk verifikasi integritas data.
      */
     private function seedLabaRugiTransactions(?int $userId): void
@@ -212,6 +212,36 @@ class FinanceErpSeeder extends Seeder
                     ['category' => 'Beban Service', 'amount' => 1900000.0],
                     ['category' => 'Beban Kebersihan', 'amount' => 142500.0],
                     ['category' => 'Beban Bank', 'amount' => 30000.0],
+                ],
+            ],
+            '2026-10' => [
+                'income' => [
+                    ['category' => 'Penjualan Produk', 'title' => 'Penjualan Produk Gross Marketplace Oktober 2026', 'amount' => 3150000000.0, 'date' => '2026-10-21'],
+                ],
+                'deductions' => [
+                    ['category' => 'Potongan Penjualan', 'title' => 'Potongan Penjualan / Biaya Marketplace Shopee & TikTok Oktober 2026', 'amount' => 1850000000.0, 'date' => '2026-10-21'],
+                ],
+                'cogs' => [
+                    ['category' => 'Harga Pokok Penjualan', 'title' => 'HPP Produk Terjual Oktober 2026', 'amount' => 750000000.0, 'date' => '2026-10-21'],
+                ],
+                'expenses' => [
+                    ['category' => 'Bahan Baku Kain', 'amount' => 85000000.0],
+                    ['category' => 'Beban Promosi / Iklan', 'amount' => 210000000.0],
+                    ['category' => 'Beban Listrik', 'amount' => 1950000.0],
+                    ['category' => 'Beban Air', 'amount' => 175000.0],
+                    ['category' => 'Beban Internet', 'amount' => 990000.0],
+                    ['category' => 'Beban Sewa', 'amount' => 2208333.0],
+                    ['category' => 'Beban Penyusutan Mesin', 'amount' => 937500.0],
+                    ['category' => 'Beban Penyusutan Kendaraan', 'amount' => 1828645.0],
+                    ['category' => 'Beban Penyusutan Peralatan Kantor', 'amount' => 562500.0],
+                    ['category' => 'Beban Penyusutan Peralatan Konveksi', 'amount' => 837500.0],
+                    ['category' => 'Beban Perlengkapan', 'amount' => 2450000.0],
+                    ['category' => 'Beban Konsumsi Produksi', 'amount' => 6500000.0],
+                    ['category' => 'Beban Transportasi', 'amount' => 2300000.0],
+                    ['category' => 'Beban Kendaraan', 'amount' => 1600000.0],
+                    ['category' => 'Beban Service', 'amount' => 1750000.0],
+                    ['category' => 'Beban Kebersihan', 'amount' => 150000.0],
+                    ['category' => 'Beban Bank', 'amount' => 35000.0],
                 ],
             ]
         ];

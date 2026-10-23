@@ -23,6 +23,10 @@ class LaporanLabaRugiAndExcelSyncTest extends TestCase
 
         $this->adminUser = User::where('role', 'admin')->first() ?? User::factory()->create(['role' => 'admin']);
         $this->ownerUser = User::where('role', 'owner')->first() ?? User::factory()->create(['role' => 'owner']);
+
+        foreach (ProductProcessRate::distinct()->pluck('product_name') as $pName) {
+            ProductProcessRate::syncHppLaborCost($pName);
+        }
     }
 
     /**

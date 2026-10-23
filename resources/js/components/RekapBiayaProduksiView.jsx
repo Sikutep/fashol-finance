@@ -15,12 +15,15 @@ import {
   Info
 } from 'lucide-react';
 import { useLoading } from '../context/LoadingContext';
+import PrintReportModal from './PrintReportModal';
+import { exportToExcel } from '../utils/exportUtils';
 
 export default function RekapBiayaProduksiView({ currentRole }) {
   const { showTimedLoading } = useLoading();
   const [data, setData] = useState(null);
   const [availablePeriods, setAvailablePeriods] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isReportPrintOpen, setIsReportPrintOpen] = useState(false);
   const [period, setPeriod] = useState(() => {
     return new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(new Date());
   });
@@ -95,11 +98,46 @@ export default function RekapBiayaProduksiView({ currentRole }) {
           </button>
 
           <button
-            onClick={() => window.print()}
-            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-xl shadow-md transition-all flex items-center gap-2"
+            onClick={() => setIsReportPrintOpen(true)}
+            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-xl shadow-md transition-all flex items-center gap-2 text-sm"
           >
-            <Printer className="w-5 h-5" />
+            <Printer className="w-4 h-4" />
             <span>Cetak Rekap Biaya</span>
+          </button>
+
+          <button
+            onClick={() => {
+              exportToExcel({
+                filename: `Rekap_Biaya_Produksi_${period.replace(/[\/\s:]/g, '_')}`,
+                sheetName: 'Biaya Produksi',
+                title: 'CV FASHOL MITSLI SEE — REKAP BIAYA PRODUKSI',
+                subtitle: `Periode: ${period} | Total Output: ${summary.formatted_output} | Efisiensi: ${summary.formatted_efficiency}`,
+                columns: [
+                  { header: 'No', key: 'no', align: 'center' },
+                  { header: 'Komponen Biaya', key: 'component' },
+                  { header: 'Sumber Data', key: 'source' },
+                  { header: 'Nilai Biaya', key: 'amount', align: 'right' },
+                  { header: 'Kontribusi %', key: 'percentage', align: 'right' },
+                  { header: 'Integrasi Sistem', key: 'link_type', align: 'center' },
+                ],
+                data: components.map((c, i) => ({
+                  no: i + 1,
+                  component: c.component,
+                  source: c.source,
+                  amount: c.formatted_amount,
+                  percentage: summary.total_cost > 0 ? `${Math.round((c.amount / summary.total_cost) * 100)}%` : '0%',
+                  link_type: c.link_type,
+                })),
+                totals: {
+                  component: 'TOTAL BIAYA PRODUKSI',
+                  amount: summary.formatted_total_cost,
+                }
+              });
+            }}
+            className="px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold rounded-xl shadow-xs transition-all flex items-center gap-2 text-sm"
+          >
+            <Download className="w-4 h-4 text-emerald-600" />
+            <span>Ekspor Excel</span>
           </button>
         </div>
       </div>
@@ -226,9 +264,13 @@ export default function RekapBiayaProduksiView({ currentRole }) {
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
                           c.source === 'Payroll Mingguan'
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : c.source === 'Keuangan'
+                            : (c.source === 'Kas Keluar' || c.source === 'Keuangan')
                             ? 'bg-teal-50 text-teal-700 border border-teal-200'
-                            : 'bg-slate-100 text-slate-700'
+                            : c.source === 'Standar HPP Produk'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : c.source === 'Alokasi Utilitas Konveksi'
+                            ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                            : 'bg-slate-100 text-slate-700 border border-slate-200'
                         }`}>
                           {c.source}
                         </span>
@@ -261,6 +303,37 @@ export default function RekapBiayaProduksiView({ currentRole }) {
           </div>
         </div>
       </div>
+
+      {/* Print Report Modal */}
+      <PrintReportModal
+        isOpen={isReportPrintOpen}
+        onClose={() => setIsReportPrintOpen(false)}
+        title="Rekap Biaya Produksi"
+        subtitle={`Akumulasi upah produksi mingguan, bahan baku, dan overhead konveksi | Output: ${summary.formatted_output} | Rata-rata: ${summary.formatted_avg_cost}/pcs`}
+        period={period}
+        orientation="portrait"
+        excelFilename="rekap_biaya_produksi"
+        columns={[
+          { header: 'No', key: 'no', align: 'center' },
+          { header: 'Komponen Biaya', key: 'component' },
+          { header: 'Sumber Data', key: 'source' },
+          { header: 'Nilai Biaya', key: 'amount', align: 'right' },
+          { header: 'Kontribusi %', key: 'percentage', align: 'right' },
+          { header: 'Status Integrasi', key: 'link_type', align: 'center' },
+        ]}
+        data={components.map((c, i) => ({
+          no: i + 1,
+          component: c.component,
+          source: c.source,
+          amount: c.formatted_amount,
+          percentage: summary.total_cost > 0 ? `${Math.round((c.amount / summary.total_cost) * 100)}%` : '0%',
+          link_type: c.link_type,
+        }))}
+        totals={{
+          component: 'TOTAL BIAYA PRODUKSI',
+          amount: summary.formatted_total_cost,
+        }}
+      />
     </div>
   );
 }

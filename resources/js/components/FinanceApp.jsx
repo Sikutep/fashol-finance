@@ -142,7 +142,7 @@ export default function FinanceApp() {
             />
           )}
 
-          {(activeTab === 'produksi-harian' || activeTab === 'riwayat-produksi') && (
+          {activeTab === 'produksi-harian' && (
             <ProduksiHarianView
               currentRole={currentUser.role}
             />
@@ -181,6 +181,7 @@ export default function FinanceApp() {
           {activeTab === 'laporan-finance' && (
             <LaporanLabaRugiView
               currentRole={currentUser.role}
+              onNavigate={(tab) => setActiveTab(tab)}
             />
           )}
 

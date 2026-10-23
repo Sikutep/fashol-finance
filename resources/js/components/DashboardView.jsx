@@ -247,7 +247,7 @@ export default function DashboardView({ data, currentRole, onNavigate }) {
               <p className="text-sm text-slate-400">Transaksi finance dan produksi terkini</p>
             </div>
             <button 
-              onClick={() => onNavigate('riwayat-produksi')}
+              onClick={() => onNavigate('produksi-harian')}
               className="text-xs font-semibold text-emerald-700 hover:underline flex items-center gap-1"
             >
               <span>Lihat semua</span>

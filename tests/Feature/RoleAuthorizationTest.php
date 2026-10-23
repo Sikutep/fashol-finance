@@ -135,6 +135,38 @@ class RoleAuthorizationTest extends TestCase
             ]);
     }
 
+    public function test_owner_can_pay_monthly_payroll(): void
+    {
+        $payroll = MonthlyPayroll::first();
+        if (!$payroll) {
+            $payroll = MonthlyPayroll::create([
+                'payroll_number' => 'PYM-TEST-03',
+                'worker_name' => 'Staf Finance',
+                'position' => 'Finance',
+                'period' => 'Oktober 2026',
+                'basic_salary' => 5500000,
+                'total_salary' => 5500000,
+                'status' => 'Disetujui',
+            ]);
+        }
+
+        // Admin cannot pay
+        $resAdmin = $this->actingAs($this->adminUser)->postJson("/api/payroll-bulanan/{$payroll->id}/status", [
+            'status' => 'Dibayar',
+        ]);
+        $resAdmin->assertStatus(403);
+
+        // Owner can pay
+        $resOwner = $this->actingAs($this->ownerUser)->postJson("/api/payroll-bulanan/{$payroll->id}/status", [
+            'status' => 'Dibayar',
+        ]);
+        $resOwner->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'new_status' => 'Dibayar',
+            ]);
+    }
+
     public function test_only_owner_can_lock_and_validate_hpp_standards(): void
     {
         // Admin attempt -> forbidden

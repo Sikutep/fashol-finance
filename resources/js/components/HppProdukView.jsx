@@ -19,7 +19,7 @@ import {
 import { useLoading } from '../context/LoadingContext';
 
 export default function HppProdukView({ currentRole }) {
-  const { showLoading, showSuccess, hideLoading } = useLoading();
+  const { showLoading, showSuccess, showError, hideLoading } = useLoading();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -83,12 +83,12 @@ export default function HppProdukView({ currentRole }) {
         });
       } else {
         hideLoading();
-        alert(json.message || 'Gagal memperbarui HPP.');
+        showError(json.message || 'Gagal memperbarui HPP.');
       }
     } catch (e) {
       hideLoading();
       console.error(e);
-      alert('Terjadi kesalahan jaringan.');
+      showError('Terjadi kesalahan jaringan.');
     }
   };
 
@@ -134,12 +134,12 @@ export default function HppProdukView({ currentRole }) {
         });
       } else {
         hideLoading();
-        alert(json.message || 'Gagal memperbarui komponen HPP.');
+        showError(json.message || 'Gagal memperbarui komponen HPP.');
       }
     } catch (err) {
       hideLoading();
       console.error(err);
-      alert('Terjadi kesalahan jaringan.');
+      showError('Terjadi kesalahan jaringan.');
     }
   };
 
@@ -407,9 +407,9 @@ export default function HppProdukView({ currentRole }) {
                 <input
                   type="number"
                   min="0"
-                  step="500"
+                  step="any"
                   value={editFormData.material_cost}
-                  onChange={(e) => setEditFormData({ ...editFormData, material_cost: parseFloat(e.target.value) || 0 })}
+                  onChange={(e) => setEditFormData({ ...editFormData, material_cost: e.target.value })}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600 font-semibold"
                   required
                 />
@@ -445,9 +445,9 @@ export default function HppProdukView({ currentRole }) {
                 <input
                   type="number"
                   min="0"
-                  step="500"
+                  step="any"
                   value={editFormData.overhead_cost}
-                  onChange={(e) => setEditFormData({ ...editFormData, overhead_cost: parseFloat(e.target.value) || 0 })}
+                  onChange={(e) => setEditFormData({ ...editFormData, overhead_cost: e.target.value })}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600 font-semibold"
                   required
                 />

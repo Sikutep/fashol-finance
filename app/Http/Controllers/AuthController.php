@@ -49,6 +49,7 @@ class AuthController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Login berhasil. Selamat datang kembali, ' . $user->name,
+                'csrf_token' => csrf_token(),
                 'user' => [
                     'id' => $user->id,
                     'name' => $user->name,

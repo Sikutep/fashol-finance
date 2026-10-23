@@ -52,15 +52,28 @@ class DailyProductionController extends Controller
         $totalWage = (float) $summaryQuery->sum('total_wage');
         $totalTransactions = (int) $summaryQuery->count();
 
-        $perPage = $request->input('per_page', 10);
+        $perPage = min(100, max(5, (int) $request->input('per_page', 10)));
         $productions = $query->orderBy('production_date', 'desc')->orderBy('id', 'desc')->paginate($perPage);
 
         // Format items for table display
         $formattedData = collect($productions->items())->map(function ($p) {
+            $itemCount = $p->items->count();
             $firstItem = $p->items->first();
-            $productDisplay = $firstItem ? ($firstItem->product_name . ' - ' . ($firstItem->variation ? $firstItem->variation . ' • ' : '') . ($firstItem->color ?? '')) : '-';
-            $qty = $firstItem ? $firstItem->qty : $p->total_qty;
-            $rate = $firstItem ? $firstItem->rate : ($p->total_qty > 0 ? ($p->total_wage / $p->total_qty) : 0);
+
+            if ($itemCount > 1) {
+                $productDisplay = $p->items->map(function ($it) {
+                    $parts = array_filter([$it->product_name, $it->color, $it->variation]);
+                    return implode(' ', $parts) . " ({$it->qty} pcs)";
+                })->join(', ');
+                $qty = (int) $p->total_qty;
+                $rate = $p->total_qty > 0 ? round($p->total_wage / $p->total_qty) : 0;
+                $formattedRate = 'Rp ' . number_format($rate, 0, ',', '.') . ' (rata-rata)';
+            } else {
+                $productDisplay = $firstItem ? ($firstItem->product_name . ' - ' . ($firstItem->variation ? $firstItem->variation . ' • ' : '') . ($firstItem->color ?? '')) : '-';
+                $qty = $firstItem ? (int) $firstItem->qty : (int) $p->total_qty;
+                $rate = $firstItem ? (float) $firstItem->rate : ($p->total_qty > 0 ? ($p->total_wage / $p->total_qty) : 0);
+                $formattedRate = 'Rp ' . number_format($rate, 0, ',', '.');
+            }
 
             return [
                 'id' => $p->id,
@@ -75,8 +88,9 @@ class DailyProductionController extends Controller
                 'variation' => $firstItem?->variation ?? '',
                 'color' => $firstItem?->color ?? '',
                 'qty' => $qty,
+                'item_count' => $itemCount,
                 'rate' => (float) $rate,
-                'formatted_rate' => 'Rp ' . number_format($rate, 0, ',', '.'),
+                'formatted_rate' => $formattedRate,
                 'total_wage' => (float) $p->total_wage,
                 'formatted_total_wage' => 'Rp ' . number_format($p->total_wage, 0, ',', '.'),
                 'status' => $p->status,
@@ -138,6 +152,29 @@ class DailyProductionController extends Controller
             ], 422);
         }
 
+        // Scope Guard: Cegah karyawan bulanan / staf kantor dicatat dalam produksi harian borongan
+        if ($worker->payment_system === 'Bulanan' && $worker->type === 'Staff') {
+            return response()->json([
+                'status' => 'error',
+                'message' => "Pekerja {$worker->name} ({$worker->process}) merupakan karyawan Bulanan/Staff dan tidak dapat dicatat dalam transaksi Produksi Harian borongan.",
+            ], 422);
+        }
+
+        // Scope Guard: Cegah pencatatan backdated ke periode payroll mingguan yang telah Disetujui atau Dibayar
+        $prodDate = Carbon::parse($validated['production_date']);
+        $cycleStart = $prodDate->isThursday() ? $prodDate->copy()->startOfDay() : $prodDate->copy()->previous(Carbon::THURSDAY)->startOfDay();
+        $cycleEnd = $cycleStart->copy()->addDays(6)->endOfDay();
+
+        $existingInPeriod = DailyProduction::whereBetween('production_date', [$cycleStart->format('Y-m-d'), $cycleEnd->format('Y-m-d')])->get();
+        $isPeriodLocked = $existingInPeriod->isNotEmpty() && $existingInPeriod->every(fn($r) => in_array($r->status, ['Disetujui', 'Dibayar', 'Masuk Payroll']));
+
+        if ($isPeriodLocked && !Auth::user()->isOwner()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Periode payroll untuk tanggal ' . $prodDate->translatedFormat('d F Y') . ' telah disetujui atau dibayar. Transaksi baru tidak dapat dicatat.',
+            ], 422);
+        }
+
         // Normalize raw items list
         $rawItems = [];
         if (!empty($validated['items'])) {
@@ -190,10 +227,15 @@ class DailyProductionController extends Controller
                     }
 
                     if (!$rateRecord) {
-                        return response()->json([
-                            'status' => 'error',
-                            'message' => "Tarif aktif untuk produk '{$item['product_name']}' dan proses '{$validated['process_name']}' belum ditentukan di modul HPP.",
-                        ], 422);
+                        throw new \Illuminate\Http\Exceptions\HttpResponseException(
+                            response()->json([
+                                'status' => 'error',
+                                'message' => "Tarif aktif untuk produk '{$item['product_name']}' dan proses '{$validated['process_name']}' belum ditentukan di modul HPP.",
+                                'errors' => [
+                                    'process_name' => ["Tarif aktif untuk produk '{$item['product_name']}' dan proses '{$validated['process_name']}' belum ditentukan di modul HPP."],
+                                ],
+                            ], 422)
+                        );
                     }
                     $rate = (float) $rateRecord->rate;
                 }
@@ -306,11 +348,11 @@ class DailyProductionController extends Controller
     {
         $production = DailyProduction::findOrFail($id);
 
-        // Scope Guard: Transaksi yang sudah masuk payroll / disetujui / dibayar tidak boleh dihapus
-        if (in_array($production->status, ['Disetujui', 'Dibayar', 'Masuk Payroll'])) {
+        // Scope Guard: Transaksi yang sedang diperiksa / disetujui / dibayar tidak boleh dihapus
+        if (in_array($production->status, ['Diperiksa', 'Disetujui', 'Dibayar', 'Masuk Payroll'])) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Transaksi produksi yang telah disetujui atau masuk payroll tidak dapat dihapus demi integritas keuangan.',
+                'message' => 'Transaksi produksi yang sedang diperiksa, telah disetujui, atau masuk payroll tidak dapat dihapus demi integritas keuangan.',
             ], 422);
         }
 
@@ -319,6 +361,44 @@ class DailyProductionController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Transaksi produksi berhasil dihapus.',
+        ]);
+    }
+
+    public function exportDailyProduction(Request $request)
+    {
+        $query = DailyProduction::with(['worker', 'items']);
+        if ($request->filled('date')) {
+            $query->whereDate('production_date', $request->date);
+        }
+        if ($request->filled('process') && $request->process !== 'Semua') {
+            $query->where('process_name', $request->process);
+        }
+        $productions = $query->orderBy('production_date', 'desc')->get();
+
+        $filename = "riwayat_produksi_" . ($request->filled('date') ? $request->date : 'all') . ".csv";
+
+        $csv = "\xEF\xBB\xBF";
+        $csv .= "RIWAYAT PRODUKSI HARIAN - CV FASHOL MITSLI SEE\n";
+        $csv .= "Tanggal:," . ($request->filled('date') ? $request->date : 'Semua Tanggal') . "\n\n";
+        $csv .= "No,No Transaksi,Tanggal,Nama Pekerja,Proses,Produk,Varian,Warna,Qty (pcs),Tarif Satuan (Rp),Total Upah (Rp),Status\n";
+
+        $no = 1;
+        $totalQty = 0;
+        $totalWage = 0;
+        foreach ($productions as $p) {
+            foreach ($p->items as $it) {
+                $pDate = $p->production_date ? Carbon::parse($p->production_date)->format('Y-m-d') : '-';
+                $csv .= "{$no}," . '"' . $p->transaction_number . '",' . '"' . $pDate . '",' . '"' . ($p->worker->name ?? '-') . '",' . '"' . $p->process_name . '",' . '"' . $it->product_name . '",' . '"' . ($it->variation ?: '-') . '",' . '"' . ($it->color ?: '-') . '",' . $it->qty . ',' . $it->rate . ',' . $it->total_wage . ',' . '"' . $p->status . '"' . "\n";
+                $totalQty += (int) $it->qty;
+                $totalWage += (float) $it->total_wage;
+                $no++;
+            }
+        }
+        $csv .= "TOTAL,,,,,,,,{$totalQty},,{$totalWage},\n";
+
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ]);
     }
 }

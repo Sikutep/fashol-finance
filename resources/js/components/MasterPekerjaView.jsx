@@ -13,8 +13,22 @@ import {
 } from 'lucide-react';
 import { useLoading } from '../context/LoadingContext';
 
+const STAFF_POSITIONS = [
+  'Owner / Manajemen',
+  'Finance / Kasir',
+  'Admin / Operasional',
+  'Legal',
+  'Konten Spesialis',
+  'Host Live',
+  'Driver / Gudang',
+  'Packing',
+  'PIC Konveksi',
+  'PIC QC',
+  'Staf Konveksi',
+];
+
 export default function MasterPekerjaView({ currentRole }) {
-  const { showLoading, showSuccess, hideLoading } = useLoading();
+  const { showLoading, showSuccess, showError, hideLoading } = useLoading();
   const [workers, setWorkers] = useState([]);
   const [pagination, setPagination] = useState({ current_page: 1, last_page: 1, total: 0, from: 0, to: 0 });
   const [search, setSearch] = useState('');
@@ -30,6 +44,7 @@ export default function MasterPekerjaView({ currentRole }) {
     type: 'Produksi',
     process: '',
     payment_system: 'Borongan',
+    default_salary: '',
     status: 'Aktif',
     notes: '',
   });
@@ -76,8 +91,9 @@ export default function MasterPekerjaView({ currentRole }) {
     setFormData({
       name: '',
       type: 'Produksi',
-      process: availableProcesses[0] || '',
+      process: availableProcesses[0] || 'Jahit',
       payment_system: 'Borongan',
+      default_salary: '',
       status: 'Aktif',
       notes: '',
     });
@@ -91,6 +107,7 @@ export default function MasterPekerjaView({ currentRole }) {
       type: worker.type,
       process: worker.process,
       payment_system: worker.payment_system,
+      default_salary: worker.default_salary > 0 ? worker.default_salary : '',
       status: worker.status,
       notes: worker.notes || '',
     });
@@ -100,7 +117,7 @@ export default function MasterPekerjaView({ currentRole }) {
   const handleSaveWorker = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) {
-      alert('Nama pekerja wajib diisi!');
+      showError('Nama pekerja wajib diisi!');
       return;
     }
 
@@ -136,12 +153,12 @@ export default function MasterPekerjaView({ currentRole }) {
         });
       } else {
         hideLoading();
-        alert(json.message || 'Gagal menyimpan data pekerja.');
+        showError(json.message || 'Gagal menyimpan data pekerja.');
       }
     } catch (err) {
       hideLoading();
       console.error(err);
-      alert('Terjadi kesalahan jaringan saat menyimpan pekerja.');
+      showError('Terjadi kesalahan jaringan saat menyimpan pekerja.');
     }
   };
 
@@ -172,12 +189,12 @@ export default function MasterPekerjaView({ currentRole }) {
         });
       } else {
         hideLoading();
-        alert(json.message || 'Gagal menghapus pekerja.');
+        showError(json.message || 'Gagal menghapus pekerja.');
       }
     } catch (err) {
       hideLoading();
       console.error(err);
-      alert('Terjadi kesalahan jaringan.');
+      showError('Terjadi kesalahan jaringan.');
     }
   };
 
@@ -218,12 +235,12 @@ export default function MasterPekerjaView({ currentRole }) {
         });
       } else {
         hideLoading();
-        alert(json.message || 'Gagal sinkronisasi akun.');
+        showError(json.message || 'Gagal sinkronisasi akun.');
       }
     } catch (e) {
       hideLoading();
       console.error(e);
-      alert('Terjadi kesalahan jaringan.');
+      showError('Terjadi kesalahan jaringan.');
     }
   };
 
@@ -361,7 +378,12 @@ export default function MasterPekerjaView({ currentRole }) {
                         {worker.process}
                       </td>
                       <td className="py-4 px-6 text-slate-600">
-                        {worker.payment_system}
+                        <div className="font-medium">{worker.payment_system}</div>
+                        {worker.payment_system === 'Bulanan' && Number(worker.default_salary) > 0 && (
+                          <div className="text-xs text-emerald-700 font-mono font-semibold mt-0.5">
+                            Rp {Number(worker.default_salary).toLocaleString('id-ID')}
+                          </div>
+                        )}
                       </td>
                       <td className="py-4 px-6">
                         <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
@@ -487,21 +509,27 @@ export default function MasterPekerjaView({ currentRole }) {
                 {/* Proses / Bagian */}
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Proses / Bagian
+                    Proses / Bagian / Jabatan
                   </label>
                   <select
                     value={formData.process}
                     onChange={(e) => setFormData({ ...formData, process: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600"
                   >
-                    {formData.type === 'Staff' ? (
+                    {formData.type === 'Staff' || formData.payment_system === 'Bulanan' ? (
                       <>
-                        <option value="Owner / Manajemen">Owner / Manajemen</option>
-                        <option value="Finance / Kasir">Finance / Kasir</option>
-                        <option value="Admin / Operasional">Admin / Operasional</option>
+                        {formData.process && !STAFF_POSITIONS.includes(formData.process) && (
+                          <option value={formData.process}>{formData.process}</option>
+                        )}
+                        {STAFF_POSITIONS.map((pos, idx) => (
+                          <option key={idx} value={pos}>{pos}</option>
+                        ))}
                       </>
                     ) : (
                       <>
+                        {formData.process && !availableProcesses.includes(formData.process) && (
+                          <option value={formData.process}>{formData.process}</option>
+                        )}
                         {availableProcesses.map((p, idx) => (
                           <option key={idx} value={p}>{p}</option>
                         ))}
@@ -517,7 +545,15 @@ export default function MasterPekerjaView({ currentRole }) {
                   </label>
                   <select
                     value={formData.payment_system}
-                    onChange={(e) => setFormData({ ...formData, payment_system: e.target.value })}
+                    onChange={(e) => {
+                      const newSys = e.target.value;
+                      setFormData({ 
+                        ...formData, 
+                        payment_system: newSys,
+                        type: newSys === 'Bulanan' ? formData.type : 'Produksi',
+                        process: newSys === 'Bulanan' ? (STAFF_POSITIONS.includes(formData.process) ? formData.process : STAFF_POSITIONS[0]) : (availableProcesses[0] || 'Jahit'),
+                      });
+                    }}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600"
                   >
                     <option value="Borongan">Borongan</option>
@@ -525,6 +561,27 @@ export default function MasterPekerjaView({ currentRole }) {
                     <option value="Bulanan">Bulanan</option>
                   </select>
                 </div>
+
+                {/* Gaji Pokok Acuan (Khusus Bulanan) */}
+                {formData.payment_system === 'Bulanan' && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Gaji Pokok Acuan (Rp)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="50000"
+                      value={formData.default_salary}
+                      onChange={(e) => setFormData({ ...formData, default_salary: e.target.value })}
+                      placeholder="Contoh: 1800000"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 font-mono"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Otomatis menjadi nilai awal slip payroll bulanan tanpa tebakan heuristik.
+                    </p>
+                  </div>
+                )}
 
                 {/* Status */}
                 <div>

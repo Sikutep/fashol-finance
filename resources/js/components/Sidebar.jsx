@@ -4,7 +4,6 @@ import {
   Users, 
   Scissors,
   Activity, 
-  Clock, 
   CreditCard, 
   Calendar, 
   Layers, 
@@ -29,7 +28,6 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
         { id: 'master-pekerja', label: 'Master Pekerja', icon: Users },
         { id: 'master-proses', label: 'Master Proses', icon: Scissors },
         { id: 'produksi-harian', label: 'Produksi Harian', icon: Activity },
-        { id: 'riwayat-produksi', label: 'Riwayat Produksi', icon: Clock },
         { id: 'payroll-mingguan', label: 'Payroll Mingguan', icon: CreditCard },
         { id: 'payroll-bulanan', label: 'Payroll Bulanan', icon: Calendar },
       ],
@@ -51,7 +49,7 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
     : 'U';
 
   return (
-    <aside className="w-72 bg-[#0D241C] text-[#E0E7E3] flex flex-col min-h-screen shrink-0 border-r border-[#15352A]">
+    <aside className="w-72 bg-[#0D241C] text-[#E0E7E3] flex flex-col h-screen sticky top-0 shrink-0 border-r border-[#15352A] z-30 overflow-hidden">
       
       {/* Brand Header */}
       <div className="p-6 pb-5 flex items-center gap-3.5 border-b border-[#15352A]/60">

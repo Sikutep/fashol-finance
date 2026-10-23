@@ -3,12 +3,6 @@ import { Layers, Landmark, BarChart3, FileText, CreditCard, Calendar, Clock, Con
 
 export default function GenericSectionView({ tab, currentRole, onNavigate }) {
   const titles = {
-    'riwayat-produksi': {
-      title: 'Riwayat Produksi Harian',
-      desc: 'Daftar lengkap seluruh histori transaksi produksi dan status payroll.',
-      icon: Clock,
-      sub: 'Mencakup filter periode Kamis-Rabu dan penelusuran upah.'
-    },
     'payroll-mingguan': {
       title: 'Penggajian Produksi Mingguan',
       desc: 'Rekap upah borongan mingguan periode Kamis sampai Rabu.',

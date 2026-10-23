@@ -95,26 +95,48 @@ class DashboardController extends Controller
         }
         $expenseTrendFormatted = ($expenseTrend >= 0 ? '+' : '') . str_replace('.', ',', (string)$expenseTrend) . '%';
 
-        // 3. Biaya Produksi Bulan Ini vs Bulan Lalu
-        $productionWageTotal = (float) DailyProduction::whereMonth('production_date', $now->month)
-            ->whereYear('production_date', $now->year)
-            ->sum('total_wage');
-        $productionMaterialExpense = (float) FinanceTransaction::where('type', 'expense')
-            ->where('category', 'like', '%Bahan%')
-            ->whereMonth('transaction_date', $now->month)
-            ->whereYear('transaction_date', $now->year)
-            ->sum('amount');
-        $totalProductionCost = $productionWageTotal + $productionMaterialExpense;
+        // 3. Biaya Produksi Bulan Ini vs Bulan Lalu (Sinkron dengan 5 Komponen Resmi Rekap Biaya Produksi)
+        $calcProdCost = function($month, $year) {
+            $wage = (float) DailyProduction::whereMonth('production_date', $month)
+                ->whereYear('production_date', $year)
+                ->sum('total_wage');
 
-        $prevProdWage = (float) DailyProduction::whereMonth('production_date', $prevMonthDate->month)
-            ->whereYear('production_date', $prevMonthDate->year)
-            ->sum('total_wage');
-        $prevProdMat = (float) FinanceTransaction::where('type', 'expense')
-            ->where('category', 'like', '%Bahan%')
-            ->whereMonth('transaction_date', $prevMonthDate->month)
-            ->whereYear('transaction_date', $prevMonthDate->year)
-            ->sum('amount');
-        $prevProdCost = $prevProdWage + $prevProdMat;
+            $expenseQ = FinanceTransaction::where('type', 'expense')
+                ->whereMonth('transaction_date', $month)
+                ->whereYear('transaction_date', $year);
+
+            $mat = (float) (clone $expenseQ)->where(function($q) {
+                $q->where('category', 'like', '%Bahan%')
+                  ->orWhere('title', 'like', '%Bahan%')
+                  ->orWhere('title', 'like', '%Kain%')
+                  ->orWhere('title', 'like', '%Benang%');
+            })->sum('amount');
+
+            $service = (float) (clone $expenseQ)->where(function($q) {
+                $q->where('category', 'like', '%Jasa%')
+                  ->orWhere('title', 'like', '%Jasa%')
+                  ->orWhere('title', 'like', '%Sablon%')
+                  ->orWhere('title', 'like', '%Bordir%');
+            })->sum('amount');
+
+            $repair = (float) (clone $expenseQ)->where(function($q) {
+                $q->where('category', 'like', '%Repair%')
+                  ->orWhere('title', 'like', '%Repair%')
+                  ->orWhere('title', 'like', '%Rework%')
+                  ->orWhere('title', 'like', '%Reject%');
+            })->sum('amount');
+
+            $overhead = (float) (clone $expenseQ)->where(function($q) {
+                $q->where('category', 'like', '%Overhead%')
+                  ->orWhere('title', 'like', '%Overhead%')
+                  ->orWhere('category', 'like', '%Operasional & Utilitas%');
+            })->sum('amount');
+
+            return $wage + $mat + $service + $repair + $overhead;
+        };
+
+        $totalProductionCost = $calcProdCost($now->month, $now->year);
+        $prevProdCost = $calcProdCost($prevMonthDate->month, $prevMonthDate->year);
 
         $prodCostTrend = 0.0;
         $prodCostTrendPos = true;
@@ -151,23 +173,28 @@ class DashboardController extends Controller
             $expenseData[] = (float) $exp;
         }
 
-        // 5. Ringkasan HPP Produk per Unit (Dihitung dinamis dari tarif proses aktif)
-        $productRates = ProductProcessRate::where('is_active', true)
-            ->selectRaw('product_name, SUM(rate) as total_hpp, COUNT(id) as total_processes')
-            ->groupBy('product_name')
-            ->get();
+        // 5. Ringkasan HPP Produk per Unit (Dihitung dinamis dari standar HPP resmi: Bahan + BTKL + Overhead)
+        \App\Http\Controllers\FinanceExtendedController::ensureHppStandardsExist();
+        $hppComponents = \App\Models\ProductHppComponent::where('status', 'Aktif')->get();
 
-        $hppSummary = $productRates->map(function ($item) {
-            $hppComp = \App\Models\ProductHppComponent::where('product_name', $item->product_name)->first();
-            $code = $hppComp?->code ?? 'PRD';
+        $hppSummary = $hppComponents->map(function ($h) {
+            $totalProcesses = ProductProcessRate::where('is_active', true)
+                ->where(function ($q) use ($h) {
+                    $grp = ProductGroup::where('name', $h->product_name)->first();
+                    if ($grp) {
+                        $q->where('product_group_id', $grp->id)->orWhere('product_name', $h->product_name);
+                    } else {
+                        $q->where('product_name', $h->product_name);
+                    }
+                })->count();
 
             return [
-                'code' => $code,
-                'name' => $item->product_name,
-                'total_hpp' => (float) $item->total_hpp,
-                'total_processes' => $item->total_processes,
+                'code' => $h->code,
+                'name' => $h->product_name,
+                'total_hpp' => (float) $h->total_hpp,
+                'total_processes' => $totalProcesses,
                 'trend' => 'Aktif',
-                'updated_at' => Carbon::now()->format('d M'),
+                'updated_at' => $h->updated_at ? Carbon::parse($h->updated_at)->translatedFormat('d M') : Carbon::now()->translatedFormat('d M'),
             ];
         });
 

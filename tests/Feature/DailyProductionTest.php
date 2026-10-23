@@ -25,7 +25,7 @@ class DailyProductionTest extends TestCase
         \App\Http\Controllers\FinanceExtendedController::ensureHppStandardsExist();
 
         $this->user = User::where('role', 'admin')->first() ?? User::factory()->create(['role' => 'admin']);
-        $this->activeWorker = Worker::where('status', 'Aktif')->first() ?? Worker::create([
+        $this->activeWorker = Worker::where('status', 'Aktif')->where('payment_system', 'Borongan')->first() ?? Worker::create([
             'worker_code' => 'PKR-TEST-ACTIVE',
             'name' => 'Pekerja Aktif Test',
             'type' => 'Produksi',
