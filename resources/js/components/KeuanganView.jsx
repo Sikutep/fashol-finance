@@ -92,11 +92,13 @@ export default function KeuanganView({ currentRole }) {
     fetchFinance();
   }, [search, filterType, period, page]);
 
-  const handleOpenCreateModal = () => {
+  const handleOpenCreateModalWithType = (initialType = 'income') => {
     setEditingId(null);
     setFormData({
-      type: 'income',
-      category: categories.income?.[0] || 'Penjualan Produk',
+      type: initialType,
+      category: initialType === 'income' 
+        ? (categories.income?.[0] || 'Penjualan Produk')
+        : (categories.operating_expenses?.[0] || 'Beban Perlengkapan'),
       title: '',
       amount: '',
       transaction_date: new Date().toISOString().split('T')[0],
@@ -105,6 +107,8 @@ export default function KeuanganView({ currentRole }) {
     });
     setIsModalOpen(true);
   };
+
+  const handleOpenCreateModal = () => handleOpenCreateModalWithType('income');
 
   const handleOpenEditModal = (trx) => {
     setEditingId(trx.id);
@@ -262,11 +266,21 @@ export default function KeuanganView({ currentRole }) {
           </div>
 
           <button
-            onClick={handleOpenCreateModal}
-            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-xl shadow-md transition-all flex items-center gap-2 text-sm"
+            onClick={() => handleOpenCreateModalWithType('income')}
+            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 text-xs sm:text-sm cursor-pointer"
+            title="Catat omzet penjualan, transfer marketplace, atau pendapatan lain"
           >
-            <Plus className="w-5 h-5" />
-            <span>Tambah Transaksi</span>
+            <ArrowUpRight className="w-4 h-4" />
+            <span>+ Kas Masuk</span>
+          </button>
+
+          <button
+            onClick={() => handleOpenCreateModalWithType('expense')}
+            className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 text-xs sm:text-sm cursor-pointer"
+            title="Catat belanja bahan baku, operasional, konsumsi, listrik, bensin"
+          >
+            <ArrowDownRight className="w-4 h-4" />
+            <span>- Kas Keluar</span>
           </button>
         </div>
       </div>
@@ -576,9 +590,15 @@ export default function KeuanganView({ currentRole }) {
             <h3 className="text-xl font-extrabold text-slate-900 mb-1">
               {editingId ? 'Edit Transaksi Kas' : 'Catat Transaksi Kas Baru'}
             </h3>
-            <p className="text-xs text-slate-500 mb-5">
+            <p className="text-xs text-slate-500 mb-4">
               {editingId ? 'Sesuaikan informasi penerimaan atau pengeluaran kas' : 'Input arus pendapatan atau pengeluaran operasional & bahan produksi'}
             </p>
+
+            {/* Live Cash Balance Indicator */}
+            <div className="mb-4 p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs">
+              <span className="text-slate-600 font-medium">Sisa Saldo Kas Toko Saat Ini:</span>
+              <span className="font-extrabold text-emerald-700 text-sm">{summary.formatted_net_balance}</span>
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Type Switcher */}
@@ -590,7 +610,7 @@ export default function KeuanganView({ currentRole }) {
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, type: 'income', category: categories.income?.[0] || 'Penjualan Produk' })}
-                    className={`py-2.5 rounded-xl font-bold text-sm border transition-all ${
+                    className={`py-2.5 rounded-xl font-bold text-sm border transition-all cursor-pointer ${
                       formData.type === 'income'
                         ? 'bg-emerald-50 border-emerald-600 text-emerald-800 ring-1 ring-emerald-500'
                         : 'bg-white border-slate-200 text-slate-600'
@@ -601,7 +621,7 @@ export default function KeuanganView({ currentRole }) {
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, type: 'expense', category: categories.operating_expenses?.[0] || 'Beban Gaji Karyawan' })}
-                    className={`py-2.5 rounded-xl font-bold text-sm border transition-all ${
+                    className={`py-2.5 rounded-xl font-bold text-sm border transition-all cursor-pointer ${
                       formData.type === 'expense'
                         ? 'bg-rose-50 border-rose-600 text-rose-800 ring-1 ring-rose-500'
                         : 'bg-white border-slate-200 text-slate-600'
@@ -615,7 +635,7 @@ export default function KeuanganView({ currentRole }) {
               {/* Category */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
-                  Kategori
+                  Kategori Akun
                 </label>
                 <select
                   value={formData.category}
@@ -661,6 +681,35 @@ export default function KeuanganView({ currentRole }) {
                     </>
                   )}
                 </select>
+
+                {/* Quick Expense Category Chips */}
+                {formData.type === 'expense' && (
+                  <div className="mt-2.5">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                      <span>Pilih Cepat Kategori Pengeluaran:</span>
+                      <span className="text-[10px] text-emerald-700 font-semibold">Klik chip</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                      {[...(categories.cogs || []), ...(categories.operating_expenses || []).slice(0, 6)].map((catName) => {
+                        const shortLabel = catName.replace(/^Beban\s+/i, '');
+                        return (
+                          <button
+                            key={catName}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, category: catName })}
+                            className={`px-2 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
+                              formData.category === catName
+                                ? 'bg-rose-100 text-rose-800 border-rose-300 ring-1 ring-rose-400'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {shortLabel}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Title / Description */}

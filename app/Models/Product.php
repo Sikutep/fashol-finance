@@ -28,4 +28,9 @@ class Product extends Model
     {
         return $this->belongsTo(ProductGroup::class);
     }
+
+    public function dailyProductionItems()
+    {
+        return $this->hasMany(DailyProductionItem::class);
+    }
 }

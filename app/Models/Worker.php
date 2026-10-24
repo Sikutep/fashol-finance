@@ -16,6 +16,8 @@ class Worker extends Model
         'name',
         'type',
         'process',
+        'staff_position_id',
+        'production_process_id',
         'payment_system',
         'default_salary',
         'payroll_day',
@@ -25,11 +27,23 @@ class Worker extends Model
 
     protected $casts = [
         'default_salary' => 'float',
+        'staff_position_id' => 'integer',
+        'production_process_id' => 'integer',
     ];
 
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function staffPosition()
+    {
+        return $this->belongsTo(StaffPosition::class, 'staff_position_id');
+    }
+
+    public function productionProcess()
+    {
+        return $this->belongsTo(ProductionProcess::class, 'production_process_id');
     }
 
     public function dailyProductions()

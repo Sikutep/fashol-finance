@@ -106,30 +106,54 @@ class DashboardController extends Controller
                 ->whereYear('transaction_date', $year);
 
             $mat = (float) (clone $expenseQ)->where(function($q) {
-                $q->where('category', 'like', '%Bahan%')
-                  ->orWhere('title', 'like', '%Bahan%')
-                  ->orWhere('title', 'like', '%Kain%')
-                  ->orWhere('title', 'like', '%Benang%');
+                $q->where('cost_type', 'material')
+                  ->orWhere(function($sub) {
+                      $sub->whereNull('cost_type')
+                          ->where(function($sq) {
+                              $sq->where('category', 'like', '%Bahan%')
+                                 ->orWhere('title', 'like', '%Bahan%')
+                                 ->orWhere('title', 'like', '%Kain%')
+                                 ->orWhere('title', 'like', '%Benang%');
+                          });
+                  });
             })->sum('amount');
 
             $service = (float) (clone $expenseQ)->where(function($q) {
-                $q->where('category', 'like', '%Jasa%')
-                  ->orWhere('title', 'like', '%Jasa%')
-                  ->orWhere('title', 'like', '%Sablon%')
-                  ->orWhere('title', 'like', '%Bordir%');
+                $q->where('cost_type', 'service')
+                  ->orWhere(function($sub) {
+                      $sub->whereNull('cost_type')
+                          ->where(function($sq) {
+                              $sq->where('category', 'like', '%Jasa%')
+                                 ->orWhere('title', 'like', '%Jasa%')
+                                 ->orWhere('title', 'like', '%Sablon%')
+                                 ->orWhere('title', 'like', '%Bordir%');
+                          });
+                  });
             })->sum('amount');
 
             $repair = (float) (clone $expenseQ)->where(function($q) {
-                $q->where('category', 'like', '%Repair%')
-                  ->orWhere('title', 'like', '%Repair%')
-                  ->orWhere('title', 'like', '%Rework%')
-                  ->orWhere('title', 'like', '%Reject%');
+                $q->where('cost_type', 'repair')
+                  ->orWhere(function($sub) {
+                      $sub->whereNull('cost_type')
+                          ->where(function($sq) {
+                              $sq->where('category', 'like', '%Repair%')
+                                 ->orWhere('title', 'like', '%Repair%')
+                                 ->orWhere('title', 'like', '%Rework%')
+                                 ->orWhere('title', 'like', '%Reject%');
+                          });
+                  });
             })->sum('amount');
 
             $overhead = (float) (clone $expenseQ)->where(function($q) {
-                $q->where('category', 'like', '%Overhead%')
-                  ->orWhere('title', 'like', '%Overhead%')
-                  ->orWhere('category', 'like', '%Operasional & Utilitas%');
+                $q->where('cost_type', 'overhead')
+                  ->orWhere(function($sub) {
+                      $sub->whereNull('cost_type')
+                          ->where(function($sq) {
+                              $sq->where('category', 'like', '%Overhead%')
+                                 ->orWhere('title', 'like', '%Overhead%')
+                                 ->orWhere('category', 'like', '%Operasional & Utilitas%');
+                          });
+                  });
             })->sum('amount');
 
             return $wage + $mat + $service + $repair + $overhead;

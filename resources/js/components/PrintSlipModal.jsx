@@ -37,7 +37,7 @@ export default function PrintSlipModal({
 
     if (isWeekly) {
       const details = slip.details || [];
-      const slipPaymentDate = slip.payment_date || (slip.payroll_day === 'Sabtu' && paymentDate ? paymentDate.replace('Kamis', 'Sabtu') : paymentDate) || (slip.payroll_day === 'Sabtu' ? 'Sabtu, Akhir Periode' : 'Kamis, Akhir Periode');
+      const slipPaymentDate = slip.payment_date || paymentDate || '-';
       return `
         <div class="slip-container ${!isLast ? 'page-break' : ''}">
           <!-- Header -->

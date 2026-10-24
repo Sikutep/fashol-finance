@@ -87,9 +87,10 @@ export default function LoginPage({ onLoginSuccess }) {
             Masuk ke Sistem
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Gunakan akun email Anda untuk mengakses modul finance.
+            Gunakan nama pengguna (admin / owner) atau alamat email Anda.
           </p>
         </div>
+
 
         {errorMsg && (
           <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200/80 text-rose-700 text-sm flex items-start gap-2.5">
@@ -99,31 +100,34 @@ export default function LoginPage({ onLoginSuccess }) {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Email Input */}
+          {/* Email / Username Input */}
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Alamat Email
+              Email atau Nama Pengguna
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                 <Mail className="w-5 h-5" />
               </div>
               <input
-                type="email"
+                type="text"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="nama@fashol.com"
-                className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 bg-slate-50/50"
+                placeholder="Ketik 'admin', 'owner', atau email"
+                className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 bg-slate-50/50 font-medium"
               />
             </div>
           </div>
 
           {/* Password Input */}
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Kata Sandi
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-semibold text-slate-700">
+                Kata Sandi (Password)
+              </label>
+              <span className="text-[11px] text-slate-400">Klik ikon mata untuk intip sandi</span>
+            </div>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                 <Lock className="w-5 h-5" />
@@ -133,15 +137,16 @@ export default function LoginPage({ onLoginSuccess }) {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full pl-11 pr-11 py-3 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 bg-slate-50/50"
+                placeholder="Masukkan kata sandi"
+                className="w-full pl-11 pr-11 py-3 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 bg-slate-50/50 font-medium"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600"
+                title={showPassword ? "Sembunyikan sandi" : "Lihat sandi"}
               >
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                {showPassword ? <EyeOff className="w-5 h-5 text-emerald-600" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
           </div>
@@ -159,11 +164,11 @@ export default function LoginPage({ onLoginSuccess }) {
             {isSubmitting ? (
               <>
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span>Memproses...</span>
+                <span>Sedang Masuk ke Sistem...</span>
               </>
             ) : (
               <>
-                <span>Masuk Sekarang</span>
+                <span>Masuk ke Aplikasi Finance</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
@@ -173,7 +178,7 @@ export default function LoginPage({ onLoginSuccess }) {
         {/* Informative Hint */}
         <div className="mt-8 pt-6 border-t border-slate-100 text-center">
           <p className="text-xs text-slate-500 font-medium">
-            Gunakan akun resmi Fashol yang telah terdaftar di sistem.
+            Lupa kata sandi atau akun bermasalah? Hubungi Owner / Tim IT Pabrik.
           </p>
         </div>
 

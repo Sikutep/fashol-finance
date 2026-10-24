@@ -12,6 +12,7 @@ class MonthlyPayroll extends Model
     protected $fillable = [
         'payroll_number',
         'worker_id',
+        'staff_position_id',
         'worker_name',
         'position',
         'period',
@@ -24,6 +25,8 @@ class MonthlyPayroll extends Model
     ];
 
     protected $casts = [
+        'worker_id' => 'integer',
+        'staff_position_id' => 'integer',
         'basic_salary' => 'float',
         'allowance' => 'float',
         'overtime' => 'float',
@@ -33,6 +36,11 @@ class MonthlyPayroll extends Model
 
     public function worker()
     {
-        return $this->belongsTo(Worker::class);
+        return $this->belongsTo(Worker::class)->withTrashed();
+    }
+
+    public function staffPosition()
+    {
+        return $this->belongsTo(StaffPosition::class, 'staff_position_id');
     }
 }

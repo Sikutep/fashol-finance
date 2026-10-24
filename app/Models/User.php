@@ -39,5 +39,20 @@ class User extends Authenticatable
     {
         return $this->role === 'admin';
     }
+
+    public function worker()
+    {
+        return $this->hasOne(Worker::class);
+    }
+
+    public function dailyProductions()
+    {
+        return $this->hasMany(DailyProduction::class, 'created_by');
+    }
+
+    public function financeTransactions()
+    {
+        return $this->hasMany(FinanceTransaction::class, 'created_by');
+    }
 }
 

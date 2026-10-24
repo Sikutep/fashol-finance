@@ -13,6 +13,8 @@ class FinanceTransaction extends Model
         'transaction_number',
         'type',
         'category',
+        'cost_type',
+        'category_id',
         'title',
         'amount',
         'transaction_date',
@@ -29,5 +31,10 @@ class FinanceTransaction extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function financeCategory()
+    {
+        return $this->belongsTo(FinanceCategory::class, 'category_id');
     }
 }

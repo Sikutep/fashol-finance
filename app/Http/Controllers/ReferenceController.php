@@ -19,14 +19,14 @@ class ReferenceController extends Controller
     {
         if (ProductionProcess::count() === 0) {
             $standards = [
-                ['code' => 'PRC-POTONG', 'name' => 'Potong', 'rate' => 350, 'unit' => 'pcs', 'desc' => 'Pemotongan pola kain bahan baku sesuai ukuran pola konveksi'],
-                ['code' => 'PRC-JAHIT', 'name' => 'Jahit', 'rate' => 2500, 'unit' => 'pcs', 'desc' => 'Penjahitan utama perakitan komponen kain menjadi pakaian jadi'],
-                ['code' => 'PRC-OVERDEK', 'name' => 'Overdek', 'rate' => 200, 'unit' => 'pcs', 'desc' => 'Proses penguncian kelim bawah baju dan ujung lengan (overdeck)'],
-                ['code' => 'PRC-KANSAY', 'name' => 'Kansay', 'rate' => 200, 'unit' => 'pcs', 'desc' => 'Penjahitan rantai / kansai untuk ban pinggang dan kerah'],
-                ['code' => 'PRC-QC', 'name' => 'QC', 'rate' => 300, 'unit' => 'pcs', 'desc' => 'Pemeriksaan mutu jahitan, ukuran, dan penyortiran produk reject'],
-                ['code' => 'PRC-OPP', 'name' => 'OPP', 'rate' => 250, 'unit' => 'pcs', 'desc' => 'Pengemasan produk bersih ke dalam plastik OPP individual'],
-                ['code' => 'PRC-BENANG', 'name' => 'Benang', 'rate' => 500, 'unit' => 'pcs', 'desc' => 'Pembersihan sisa benang jahitan (finishing / buang benang)'],
-                ['code' => 'PRC-BORDIR', 'name' => 'Bordir', 'rate' => 900, 'unit' => 'pcs', 'desc' => 'Aplikasi bordir logo / emblem panel pakaian'],
+                ['code' => 'PRC-POTONG', 'name' => 'Potong', 'rate' => 350, 'unit' => 'pcs', 'payroll_day' => 'Kamis', 'desc' => 'Pemotongan pola kain bahan baku sesuai ukuran pola konveksi'],
+                ['code' => 'PRC-JAHIT', 'name' => 'Jahit', 'rate' => 2500, 'unit' => 'pcs', 'payroll_day' => 'Kamis', 'desc' => 'Penjahitan utama perakitan komponen kain menjadi pakaian jadi'],
+                ['code' => 'PRC-OVERDEK', 'name' => 'Overdek', 'rate' => 200, 'unit' => 'pcs', 'payroll_day' => 'Kamis', 'desc' => 'Proses penguncian kelim bawah baju dan ujung lengan (overdeck)'],
+                ['code' => 'PRC-KANSAY', 'name' => 'Kansay', 'rate' => 200, 'unit' => 'pcs', 'payroll_day' => 'Kamis', 'desc' => 'Penjahitan rantai / kansai untuk ban pinggang dan kerah'],
+                ['code' => 'PRC-QC', 'name' => 'QC', 'rate' => 300, 'unit' => 'pcs', 'payroll_day' => 'Sabtu', 'desc' => 'Pemeriksaan mutu jahitan, ukuran, dan penyortiran produk reject'],
+                ['code' => 'PRC-OPP', 'name' => 'OPP', 'rate' => 250, 'unit' => 'pcs', 'payroll_day' => 'Sabtu', 'desc' => 'Pengemasan produk bersih ke dalam plastik OPP individual'],
+                ['code' => 'PRC-BENANG', 'name' => 'Benang', 'rate' => 500, 'unit' => 'pcs', 'payroll_day' => 'Sabtu', 'desc' => 'Pembersihan sisa benang jahitan (finishing / buang benang)'],
+                ['code' => 'PRC-BORDIR', 'name' => 'Bordir', 'rate' => 900, 'unit' => 'pcs', 'payroll_day' => 'Sabtu', 'desc' => 'Aplikasi bordir logo / emblem panel pakaian'],
             ];
 
             foreach ($standards as $s) {
@@ -36,7 +36,7 @@ class ReferenceController extends Controller
                     'description' => $s['desc'],
                     'default_rate' => $s['rate'],
                     'unit' => $s['unit'],
-                    'payroll_day' => in_array($s['name'], ['Potong', 'Jahit', 'Overdek', 'Kansay']) ? 'Kamis' : 'Sabtu',
+                    'payroll_day' => $s['payroll_day'],
                     'is_active' => true,
                 ]);
             }
@@ -100,13 +100,13 @@ class ReferenceController extends Controller
                 'id' => $grp->id,
                 'name' => $grp->name,
                 'long_name' => $grp->long_name,
-                'colors' => !empty($grpColors) ? array_keys($grpColors) : ['HITAM'],
-                'variations' => !empty($grpVars) ? array_keys($grpVars) : ['ALL SIZE'],
+                'colors' => array_keys($grpColors),
+                'variations' => array_keys($grpVars),
             ];
         }
 
-        $colors = !empty($allColors) ? array_keys($allColors) : ['HITAM', 'PUTIH', 'NAVY', 'GREY'];
-        $variations = !empty($allVariations) ? array_keys($allVariations) : ['ALL SIZE', 'S', 'M', 'L', 'XL', 'XXL'];
+        $colors = array_keys($allColors);
+        $variations = array_keys($allVariations);
 
         // 4. Daftar Proses Pekerjaan (Diambil dari Katalog Master Proses Resmi)
         $standardProcesses = ProductionProcess::where('is_active', true)
@@ -283,15 +283,13 @@ class ReferenceController extends Controller
             }
         }
 
-        $defaultDay = in_array($validated['process_name'], ['Potong', 'Jahit', 'Overdek', 'Kansay']) ? 'Kamis' : 'Sabtu';
-
         $process = ProductionProcess::create([
             'process_code' => $code,
             'process_name' => $validated['process_name'],
             'description' => $validated['description'] ?? null,
             'default_rate' => $validated['default_rate'],
             'unit' => $validated['unit'] ?? 'pcs',
-            'payroll_day' => $validated['payroll_day'] ?? $defaultDay,
+            'payroll_day' => $validated['payroll_day'] ?? 'Kamis',
             'is_active' => $validated['is_active'] ?? true,
         ]);
 
@@ -316,7 +314,17 @@ class ReferenceController extends Controller
             'is_active' => 'nullable|boolean',
         ]);
 
+        $oldName = $process->process_name;
         $process->update($validated);
+
+        if (!empty($validated['process_name']) && $oldName !== $validated['process_name']) {
+            Worker::where('production_process_id', $process->id)
+                ->orWhere('process', $oldName)
+                ->update([
+                    'process' => $process->process_name,
+                    'production_process_id' => $process->id,
+                ]);
+        }
 
         return response()->json([
             'status' => 'success',
@@ -329,16 +337,19 @@ class ReferenceController extends Controller
     {
         $process = ProductionProcess::findOrFail($id);
 
-        // Periksa apakah proses ini sedang dipakai pada tarif produk atau transaksi produksi
+        // Periksa apakah proses ini sedang dipakai pada pekerja, tarif produk, atau transaksi produksi
         $isUsedInRates = ProductProcessRate::where('process_name', $process->process_name)->exists();
         $isUsedInProductions = DailyProduction::where('process_name', $process->process_name)->exists();
+        $isUsedInWorkers = Worker::where('production_process_id', $process->id)
+            ->orWhere('process', $process->process_name)
+            ->exists();
 
-        if ($isUsedInRates || $isUsedInProductions) {
+        if ($isUsedInRates || $isUsedInProductions || $isUsedInWorkers) {
             // Lindungi integritas data dengan menonaktifkan proses (Soft Deactivate)
             $process->update(['is_active' => false]);
             return response()->json([
                 'status' => 'success',
-                'message' => "Proses '{$process->process_name}' dinonaktifkan (diarsipkan) untuk menjaga integritas data tarif dan riwayat produksi.",
+                'message' => "Proses '{$process->process_name}' dinonaktifkan (diarsipkan) untuk menjaga integritas data pekerja, tarif, dan riwayat produksi.",
                 'data' => $process,
             ]);
         }
@@ -492,6 +503,9 @@ class ReferenceController extends Controller
             $rateValue = $std ? (float) $std->default_rate : 0;
         }
 
+        $procRecord = ProductionProcess::where('process_name', $validated['process_name'])->first();
+        $productionProcessId = $procRecord?->id;
+
         // Cek apakah tarif untuk kombinasi produk dan proses ini sudah ada
         $existing = ProductProcessRate::where('product_name', $validated['product_name'])
             ->where('process_name', $validated['process_name'])
@@ -500,6 +514,7 @@ class ReferenceController extends Controller
         if ($existing) {
             $existing->update([
                 'product_group_id' => $validated['product_group_id'] ?? $existing->product_group_id,
+                'production_process_id' => $productionProcessId ?? $existing->production_process_id,
                 'rate' => $rateValue,
                 'is_custom_rate' => $isCustom,
                 'unit' => $validated['unit'] ?? $existing->unit,
@@ -516,6 +531,7 @@ class ReferenceController extends Controller
         $rate = ProductProcessRate::create([
             'product_name' => $validated['product_name'],
             'product_group_id' => $validated['product_group_id'] ?? null,
+            'production_process_id' => $productionProcessId,
             'process_name' => $validated['process_name'],
             'rate' => $rateValue ?? 0,
             'is_custom_rate' => $isCustom,
@@ -543,6 +559,19 @@ class ReferenceController extends Controller
             'unit' => 'nullable|string|max:50',
             'is_active' => 'nullable|boolean',
         ]);
+
+        if (!empty($validated['process_name'])) {
+            $procRecord = ProductionProcess::where('process_name', $validated['process_name'])->first();
+            if ($procRecord) {
+                $validated['production_process_id'] = $procRecord->id;
+            }
+        }
+        if (!empty($validated['product_name']) && empty($validated['product_group_id'])) {
+            $grp = ProductGroup::where('name', $validated['product_name'])->first();
+            if ($grp) {
+                $validated['product_group_id'] = $grp->id;
+            }
+        }
 
         $rate->update($validated);
 

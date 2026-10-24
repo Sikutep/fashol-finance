@@ -11,6 +11,7 @@ import HppProdukView from './HppProdukView';
 import KeuanganView from './KeuanganView';
 import RekapBiayaProduksiView from './RekapBiayaProduksiView';
 import LaporanLabaRugiView from './LaporanLabaRugiView';
+import PengaturanView from './PengaturanView';
 import GenericSectionView from './GenericSectionView';
 import LoginPage from './LoginPage';
 import { useLoading } from '../context/LoadingContext';
@@ -186,10 +187,8 @@ export default function FinanceApp() {
           )}
 
           {activeTab === 'pengaturan' && (
-            <GenericSectionView
-              tab={activeTab}
+            <PengaturanView
               currentRole={currentUser.role}
-              onNavigate={(tab) => setActiveTab(tab)}
             />
           )}
         </main>

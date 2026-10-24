@@ -10,9 +10,13 @@ import {
   ChevronRight,
   Layers,
   Printer,
-  FileText
+  FileText,
+  AlertCircle,
+  Sparkles,
+  RotateCcw
 } from 'lucide-react';
 import PrintReportModal from './PrintReportModal';
+import SearchableWorkerSelect from './SearchableWorkerSelect';
 import { exportToExcel, printHtmlContent, formatRupiah } from '../utils/exportUtils';
 import { useLoading } from '../context/LoadingContext';
 
@@ -41,6 +45,10 @@ export default function ProduksiHarianView({ currentRole }) {
     processes: [],
     group_attributes: {},
   });
+
+  const productionWorkerList = options.production_workers?.length > 0
+    ? options.production_workers
+    : options.workers?.filter(w => w.payment_system !== 'Bulanan' && w.type !== 'Staff') || options.workers || [];
 
   // Modal Form State with multi-item rows support
   const [formData, setFormData] = useState({
@@ -220,10 +228,14 @@ export default function ProduksiHarianView({ currentRole }) {
     const defaultProduct = options.products?.[0] || '';
     const newRow = createInitialRow(defaultProduct, formData.process_name);
 
-    setFormData(prev => ({
-      ...prev,
-      items: [...prev.items, newRow],
-    }));
+    setFormData(prev => {
+      const nextForm = {
+        ...prev,
+        items: [...prev.items, newRow],
+      };
+      saveDraft(nextForm);
+      return nextForm;
+    });
 
     if (newRow.rate === 0 && defaultProduct && formData.process_name) {
       fetchRateForItem(defaultProduct, formData.process_name, newRow.id);
@@ -232,10 +244,14 @@ export default function ProduksiHarianView({ currentRole }) {
 
   const handleRemoveItemRow = (index) => {
     if (formData.items.length <= 1) return;
-    setFormData(prev => ({
-      ...prev,
-      items: prev.items.filter((_, idx) => idx !== index),
-    }));
+    setFormData(prev => {
+      const nextForm = {
+        ...prev,
+        items: prev.items.filter((_, idx) => idx !== index),
+      };
+      saveDraft(nextForm);
+      return nextForm;
+    });
   };
 
   const handleRowFieldChange = (index, field, value) => {
@@ -262,19 +278,62 @@ export default function ProduksiHarianView({ currentRole }) {
         nextItems[index] = cur;
       }
 
-      return { ...prev, items: nextItems };
+      const nextForm = { ...prev, items: nextItems };
+      saveDraft(nextForm);
+      return nextForm;
     });
+  };
+
+  const DRAFT_KEY = 'fashol_daily_prod_draft';
+  const [hasDraft, setHasDraft] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.items?.length > 0) {
+          setHasDraft(true);
+        }
+      }
+    } catch (e) {}
+  }, [isModalOpen]);
+
+  const saveDraft = (nextForm) => {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(nextForm));
+      setHasDraft(true);
+    } catch (e) {}
+  };
+
+  const restoreDraft = () => {
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setFormData(parsed);
+        setHasDraft(false);
+      }
+    } catch (e) {}
+  };
+
+  const clearDraft = () => {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+      setHasDraft(false);
+    } catch (e) {}
   };
 
   const modalTotalQty = formData.items.reduce((sum, it) => sum + (parseInt(it.qty) || 0), 0);
   const modalTotalWage = formData.items.reduce((sum, it) => sum + ((parseInt(it.qty) || 0) * (parseFloat(it.rate) || 0)), 0);
+  const hasHugeQty = formData.items.some(it => (parseInt(it.qty) || 0) > 300) || modalTotalQty > 500;
 
-  const handleSaveProduction = async (e) => {
-    e.preventDefault();
+  const handleSaveProduction = async (e, shouldPrintAfter = false) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (!formData.worker_id) {
       showError({
         title: 'Form Belum Lengkap',
-        subtitle: 'Pilih pekerja terlebih dahulu sebelum menyimpan catatan produksi.',
+        subtitle: 'Pilih nama pekerja terlebih dahulu sebelum menyimpan catatan produksi.',
       });
       return;
     }
@@ -317,6 +376,7 @@ export default function ProduksiHarianView({ currentRole }) {
 
       const json = await res.json();
       if (res.ok && json.status === 'success') {
+        clearDraft();
         showSuccess({
           title: 'Produksi Berhasil Dicatat!',
           subtitle: `Total upah Rp ${modalTotalWage.toLocaleString('id-ID')} telah tercatat ke sistem payroll mingguan.`,
@@ -324,6 +384,23 @@ export default function ProduksiHarianView({ currentRole }) {
           onComplete: () => {
             setIsModalOpen(false);
             fetchProductions();
+            if (shouldPrintAfter && json.data) {
+              const p = json.data;
+              const printRow = {
+                id: p.id,
+                transaction_number: p.transaction_number,
+                production_date: p.production_date,
+                worker_name: p.worker?.name || options.workers?.find(w => w.id == p.worker_id)?.name || 'Pekerja',
+                process_name: p.process_name,
+                product_display: p.items?.map(it => `${it.product_name} (${it.qty} pcs)`).join(', ') || 'Produksi',
+                item_count: p.items?.length || 1,
+                qty: p.total_qty,
+                formatted_rate: p.items?.[0]?.rate ? `Rp ${Number(p.items[0].rate).toLocaleString('id-ID')}` : 'Rp 0',
+                formatted_total_wage: `Rp ${Number(p.total_wage).toLocaleString('id-ID')}`,
+                items: p.items,
+              };
+              setTimeout(() => handlePrintWorkOrders([printRow]), 600);
+            }
           }
         });
       } else {
@@ -780,9 +857,22 @@ export default function ProduksiHarianView({ currentRole }) {
             {/* Modal Header */}
             <div className="px-8 py-5 border-b border-slate-100 flex items-start justify-between bg-slate-50/50">
               <div>
-                <h3 className="text-xl font-bold text-slate-900">
-                  Input Produksi Harian (Multi-Item)
-                </h3>
+                <div className="flex items-center gap-3">
+                  <h3 className="text-xl font-bold text-slate-900">
+                    Input Produksi Harian (Multi-Item)
+                  </h3>
+                  {hasDraft && (
+                    <button
+                      type="button"
+                      onClick={restoreDraft}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200 transition-colors"
+                      title="Pulihkan ketikan yang belum sempat tersimpan"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Pulihkan Draf Ketikan</span>
+                    </button>
+                  )}
+                </div>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Catat transaksi produksi untuk satu pekerja, tanggal, dan proses dengan dukungan banyak baris produk/varian.
                 </p>
@@ -814,25 +904,17 @@ export default function ProduksiHarianView({ currentRole }) {
                   />
                 </div>
 
-                {/* Nama Pekerja */}
+                {/* Nama Pekerja (Searchable Combobox) */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
                     Nama Pekerja
                   </label>
-                  <select
-                    value={formData.worker_id}
-                    onChange={(e) => handleWorkerChange(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-lg border border-slate-200 text-sm text-slate-900 bg-white focus:outline-none focus:border-emerald-600 font-medium"
-                  >
-                    {(options.production_workers?.length > 0
-                      ? options.production_workers
-                      : options.workers?.filter(w => w.payment_system !== 'Bulanan' && w.type !== 'Staff') || options.workers || []
-                    ).map(w => (
-                      <option key={w.id} value={w.id}>
-                        {w.name} ({w.process})
-                      </option>
-                    ))}
-                  </select>
+                  <SearchableWorkerSelect
+                    workers={productionWorkerList}
+                    selectedWorkerId={formData.worker_id}
+                    onSelectWorker={handleWorkerChange}
+                    placeholder="Ketik nama atau bagian (cth: Bejo / Jahit)..."
+                  />
                 </div>
 
                 {/* Proses Pekerjaan */}
@@ -936,6 +1018,12 @@ export default function ProduksiHarianView({ currentRole }) {
                                 required
                                 value={item.qty}
                                 onChange={(e) => handleRowFieldChange(idx, 'qty', e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleAddItemRow();
+                                  }
+                                }}
                                 className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600"
                               />
                             </td>
@@ -976,18 +1064,34 @@ export default function ProduksiHarianView({ currentRole }) {
                   </table>
                 </div>
 
-                {/* Add Row Button */}
-                <div className="pt-1">
+                {/* Add Row Button & Numpad Hint */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
                   <button
                     type="button"
                     onClick={handleAddItemRow}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-dashed border-emerald-600/70 text-emerald-800 bg-emerald-50/50 hover:bg-emerald-50 text-xs font-bold transition-colors"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-dashed border-emerald-600/70 text-emerald-800 bg-emerald-50/50 hover:bg-emerald-50 text-xs font-bold transition-colors cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Tambah Baris Produk Lain</span>
                   </button>
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    ⌨️ Tips Numpad: Tekan <kbd className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-300 text-slate-700 font-mono text-[10px] font-bold">Enter</kbd> pada kolom QTY untuk tambah baris baru
+                  </span>
                 </div>
               </div>
+
+              {/* Fat-Finger Guardrail Warning Banner */}
+              {hasHugeQty && (
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs flex items-start gap-2.5">
+                  <AlertCircle className="w-5 h-5 shrink-0 text-amber-600 mt-0.5" />
+                  <div>
+                    <div className="font-bold text-amber-900">Perhatian: Kuantitas Cukup Banyak ({modalTotalQty} pcs)!</div>
+                    <div className="text-amber-800 mt-0.5">
+                      Pastikan jumlah kuantitas sudah sesuai dengan nota fisik tukang jahit dan tidak kelebihan angka nol sebelum klik simpan.
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Informative Total Summary Box */}
               <div className="p-4 rounded-xl bg-slate-900 text-white flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -1011,7 +1115,7 @@ export default function ProduksiHarianView({ currentRole }) {
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100">
+              <div className="pt-2 flex flex-wrap items-center justify-end gap-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
@@ -1020,8 +1124,17 @@ export default function ProduksiHarianView({ currentRole }) {
                   Batal
                 </button>
                 <button
+                  type="button"
+                  onClick={(e) => handleSaveProduction(e, true)}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-sm font-bold text-white shadow-xs transition-all cursor-pointer"
+                  title="Simpan data dan langsung cetak SPK / bukti setoran jahit"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Simpan & Cetak Nota</span>
+                </button>
+                <button
                   type="submit"
-                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#15352A] hover:bg-[#102920] text-sm font-bold text-white shadow-xs transition-all"
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#15352A] hover:bg-[#102920] text-sm font-bold text-white shadow-xs transition-all cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
                   <span>Simpan Transaksi Produksi</span>

@@ -7,6 +7,7 @@ use App\Http\Controllers\WorkerController;
 use App\Http\Controllers\DailyProductionController;
 use App\Http\Controllers\ReferenceController;
 use App\Http\Controllers\FinanceExtendedController;
+use App\Http\Controllers\SettingsController;
 
 // API Group for ERP Finance
 Route::prefix('api')->group(function () {
@@ -73,6 +74,16 @@ Route::prefix('api')->group(function () {
         Route::get('/laporan-laba-rugi', [FinanceExtendedController::class, 'getIncomeStatement']);
 
         Route::get('/rekap-biaya-produksi', [FinanceExtendedController::class, 'getProductionCostSummary']);
+
+        // Fitur Pengaturan ERP Finance
+        Route::get('/settings/payroll-cycles', [SettingsController::class, 'getPayrollCycles']);
+        Route::post('/settings/payroll-cycles', [SettingsController::class, 'updatePayrollCycle']);
+        Route::get('/settings/finance-categories', [SettingsController::class, 'getFinanceCategories']);
+        Route::post('/settings/finance-categories', [SettingsController::class, 'storeFinanceCategory']);
+        Route::post('/settings/finance-categories/{id}/toggle', [SettingsController::class, 'toggleFinanceCategoryStatus']);
+        Route::get('/settings/staff-positions', [SettingsController::class, 'getStaffPositions']);
+        Route::post('/settings/staff-positions', [SettingsController::class, 'storeStaffPosition']);
+        Route::delete('/settings/staff-positions/{id}', [SettingsController::class, 'deleteStaffPosition']);
 
         // Export Endpoints (Excel / CSV) with Rate Limiting (30 requests / minute)
         Route::middleware('throttle:30,1')->group(function () {

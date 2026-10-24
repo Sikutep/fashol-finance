@@ -10,6 +10,7 @@ class ProductHppComponent extends Model
     use HasFactory;
 
     protected $fillable = [
+        'product_group_id',
         'product_name',
         'product_code',
         'code',
@@ -22,10 +23,16 @@ class ProductHppComponent extends Model
     ];
 
     protected $casts = [
+        'product_group_id' => 'integer',
         'material_cost' => 'float',
         'labor_cost' => 'float',
         'overhead_cost' => 'float',
         'total_hpp' => 'float',
         'effective_date' => 'date',
     ];
+
+    public function productGroup()
+    {
+        return $this->belongsTo(ProductGroup::class, 'product_group_id');
+    }
 }

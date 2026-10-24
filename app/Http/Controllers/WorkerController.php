@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Worker;
 use App\Models\User;
 use App\Models\ProductionProcess;
+use App\Models\StaffPosition;
 
 class WorkerController extends Controller
 {
@@ -16,7 +17,7 @@ class WorkerController extends Controller
             $this->syncUsersWithWorkers();
         }
 
-        $query = Worker::with('user');
+        $query = Worker::with(['user', 'staffPosition', 'productionProcess']);
 
         // Dynamic Search
         if ($request->filled('search')) {
@@ -25,7 +26,11 @@ class WorkerController extends Controller
                 $q->where('name', 'like', "%{$search}%")
                   ->orWhere('worker_code', 'like', "%{$search}%")
                   ->orWhere('process', 'like', "%{$search}%")
-                  ->orWhere('type', 'like', "%{$search}%");
+                  ->orWhere('type', 'like', "%{$search}%")
+                  ->orWhereHas('staffPosition', function ($sq) use ($search) {
+                      $sq->where('name', 'like', "%{$search}%")
+                        ->orWhere('department', 'like', "%{$search}%");
+                  });
             });
         }
 
@@ -100,12 +105,15 @@ class WorkerController extends Controller
                         default => 'Produksi',
                     };
 
+                    $staffPos = $isStaff ? StaffPosition::where('name', $process)->first() : null;
+
                     Worker::create([
                         'user_id' => $u->id,
                         'worker_code' => $workerCode,
                         'name' => $u->name,
                         'type' => $isStaff ? 'Staff' : 'Produksi',
                         'process' => $process,
+                        'staff_position_id' => $staffPos?->id,
                         'payment_system' => 'Bulanan',
                         'status' => 'Aktif',
                         'notes' => 'User sistem (' . ucfirst($u->role ?? 'Admin') . ')',
@@ -124,7 +132,9 @@ class WorkerController extends Controller
             'user_id' => 'nullable|exists:users,id',
             'name' => 'required|string|max:255',
             'type' => 'required|string|max:100',
-            'process' => 'required|string|max:100',
+            'process' => 'nullable|string|max:100',
+            'staff_position_id' => 'nullable|exists:staff_positions,id',
+            'production_process_id' => 'nullable|exists:production_processes,id',
             'payment_system' => 'required|in:Borongan,Harian,Bulanan',
             'default_salary' => 'nullable|numeric|min:0',
             'payroll_day' => 'nullable|string|in:Kamis,Sabtu',
@@ -141,18 +151,44 @@ class WorkerController extends Controller
             $workerCode = 'PKR-' . str_pad($nextId, 3, '0', STR_PAD_LEFT);
         }
 
-        $procRecord = ProductionProcess::where('process_name', $validated['process'])->first();
-        $defaultDay = $procRecord?->payroll_day ?? (in_array($validated['process'], ['Potong', 'Jahit', 'Overdek', 'Kansay']) ? 'Kamis' : 'Sabtu');
+        // Relational alignment for Staff vs Produksi
+        if ($validated['type'] === 'Staff') {
+            if (!empty($validated['staff_position_id'])) {
+                $pos = StaffPosition::find($validated['staff_position_id']);
+                $validated['process'] = $pos?->name ?? ($validated['process'] ?? 'Staff');
+            } elseif (!empty($validated['process'])) {
+                $pos = StaffPosition::where('name', $validated['process'])->first();
+                $validated['staff_position_id'] = $pos?->id;
+            }
+            $validated['production_process_id'] = null;
+        } else {
+            // Produksi
+            if (!empty($validated['production_process_id'])) {
+                $proc = ProductionProcess::find($validated['production_process_id']);
+                $validated['process'] = $proc?->process_name ?? ($validated['process'] ?? 'Jahit');
+            } elseif (!empty($validated['process'])) {
+                $proc = ProductionProcess::where('process_name', $validated['process'])->first();
+                $validated['production_process_id'] = $proc?->id;
+            }
+            $validated['staff_position_id'] = null;
+        }
+
+        $procRecord = !empty($validated['production_process_id'])
+            ? ProductionProcess::find($validated['production_process_id'])
+            : ProductionProcess::where('process_name', $validated['process'] ?? '')->first();
+        $defaultDay = $procRecord?->payroll_day ?? 'Kamis';
 
         // Jika pekerja bertipe Produksi, single source of truth jadwal payroll adalah Master Proses
-        $payrollDay = $validated['type'] === 'Produksi' ? ($procRecord?->payroll_day ?? $defaultDay) : ($validated['payroll_day'] ?? null);
+        $payrollDay = $validated['type'] === 'Produksi' ? ($procRecord?->payroll_day ?? $defaultDay) : ($validated['payroll_day'] ?? $defaultDay);
 
         $worker = Worker::create([
             'user_id' => $validated['user_id'] ?? null,
             'worker_code' => $workerCode,
             'name' => $validated['name'],
             'type' => $validated['type'],
-            'process' => $validated['process'],
+            'process' => $validated['process'] ?? ($validated['type'] === 'Staff' ? 'Staff' : 'Jahit'),
+            'staff_position_id' => $validated['staff_position_id'] ?? null,
+            'production_process_id' => $validated['production_process_id'] ?? null,
             'payment_system' => $validated['payment_system'],
             'default_salary' => $validated['default_salary'] ?? 0,
             'payroll_day' => $payrollDay,
@@ -163,7 +199,7 @@ class WorkerController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Pekerja berhasil ditambahkan.',
-            'data' => $worker,
+            'data' => $worker->load(['staffPosition', 'productionProcess']),
         ], 201);
     }
 
@@ -176,6 +212,8 @@ class WorkerController extends Controller
             'name' => 'sometimes|required|string|max:255',
             'type' => 'sometimes|required|string|max:100',
             'process' => 'sometimes|required|string|max:100',
+            'staff_position_id' => 'nullable|exists:staff_positions,id',
+            'production_process_id' => 'nullable|exists:production_processes,id',
             'payment_system' => 'sometimes|required|in:Borongan,Harian,Bulanan',
             'default_salary' => 'nullable|numeric|min:0',
             'payroll_day' => 'nullable|string|in:Kamis,Sabtu',
@@ -183,12 +221,37 @@ class WorkerController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        // Auto-align payroll_day jika process diubah untuk pekerja Produksi
-        $targetProcess = $validated['process'] ?? $worker->process;
         $targetType = $validated['type'] ?? $worker->type;
-        if ($targetType === 'Produksi' && $targetProcess) {
-            $procRecord = ProductionProcess::where('process_name', $targetProcess)->first();
-            $standardDay = $procRecord?->payroll_day ?? (in_array($targetProcess, ['Potong', 'Jahit', 'Overdek', 'Kansay']) ? 'Kamis' : 'Sabtu');
+        $targetProcess = $validated['process'] ?? $worker->process;
+        $targetStaffPosId = array_key_exists('staff_position_id', $validated) ? $validated['staff_position_id'] : $worker->staff_position_id;
+        $targetProdProcId = array_key_exists('production_process_id', $validated) ? $validated['production_process_id'] : $worker->production_process_id;
+
+        if ($targetType === 'Staff') {
+            if (!empty($targetStaffPosId)) {
+                $pos = StaffPosition::find($targetStaffPosId);
+                $validated['process'] = $pos?->name ?? $targetProcess;
+                $validated['staff_position_id'] = $targetStaffPosId;
+            } elseif ($targetProcess) {
+                $pos = StaffPosition::where('name', $targetProcess)->first();
+                $validated['staff_position_id'] = $pos?->id;
+            }
+            $validated['production_process_id'] = null;
+        } else {
+            // Produksi
+            if (!empty($targetProdProcId)) {
+                $proc = ProductionProcess::find($targetProdProcId);
+                $validated['process'] = $proc?->process_name ?? $targetProcess;
+                $validated['production_process_id'] = $targetProdProcId;
+            } elseif ($targetProcess) {
+                $proc = ProductionProcess::where('process_name', $targetProcess)->first();
+                $validated['production_process_id'] = $proc?->id;
+            }
+            $validated['staff_position_id'] = null;
+
+            $procRecord = !empty($validated['production_process_id'])
+                ? ProductionProcess::find($validated['production_process_id'])
+                : ProductionProcess::where('process_name', $validated['process'] ?? $targetProcess)->first();
+            $standardDay = $procRecord?->payroll_day ?? 'Kamis';
             $validated['payroll_day'] = $validated['payroll_day'] ?? $standardDay;
         }
 
@@ -197,7 +260,7 @@ class WorkerController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Data pekerja berhasil diperbarui.',
-            'data' => $worker,
+            'data' => $worker->load(['staffPosition', 'productionProcess']),
         ]);
     }
 

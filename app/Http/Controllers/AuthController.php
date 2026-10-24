@@ -35,14 +35,29 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
-        $credentials = $request->validate([
-            'email' => 'required|email',
-            'password' => 'required',
-        ]);
+        $input = $request->input('email') ?? $request->input('login') ?? $request->input('username');
+        $password = $request->input('password');
 
-        $user = User::where('email', $credentials['email'])->first();
+        if (!$input || !$password) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Alamat email atau nama pengguna dan kata sandi wajib diisi.',
+            ], 422);
+        }
 
-        if ($user && Hash::check($credentials['password'], $user->password)) {
+        $user = null;
+        if (filter_var($input, FILTER_VALIDATE_EMAIL)) {
+            $user = User::where('email', $input)->first();
+        } else {
+            // Mendukung login mudah bagi pengguna awam: cukup ketik 'admin' atau 'owner'
+            $clean = strtolower(trim($input));
+            $user = User::where('email', $clean . '@fashol.com')
+                ->orWhere('role', $clean)
+                ->orWhere('name', 'like', "%{$input}%")
+                ->first();
+        }
+
+        if ($user && Hash::check($password, $user->password)) {
             Auth::login($user);
             $request->session()->regenerate();
 
@@ -61,7 +76,7 @@ class AuthController extends Controller
 
         return response()->json([
             'status' => 'error',
-            'message' => 'Email atau password yang Anda masukkan tidak sesuai.',
+            'message' => 'Email / nama pengguna atau kata sandi yang Anda masukkan tidak sesuai.',
         ], 422);
     }
 

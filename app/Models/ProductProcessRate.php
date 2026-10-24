@@ -12,6 +12,7 @@ class ProductProcessRate extends Model
     protected $fillable = [
         'product_name',
         'product_group_id',
+        'production_process_id',
         'process_name',
         'rate',
         'is_custom_rate',
@@ -20,6 +21,8 @@ class ProductProcessRate extends Model
     ];
 
     protected $casts = [
+        'product_group_id' => 'integer',
+        'production_process_id' => 'integer',
         'rate' => 'float',
         'is_custom_rate' => 'boolean',
         'is_active' => 'boolean',
@@ -32,7 +35,7 @@ class ProductProcessRate extends Model
 
     public function productionProcess()
     {
-        return $this->belongsTo(ProductionProcess::class, 'process_name', 'process_name');
+        return $this->belongsTo(ProductionProcess::class, 'production_process_id');
     }
 
     protected static function booted(): void

@@ -35,6 +35,16 @@ class ProductionProcess extends Model
 
     public function productRates()
     {
-        return $this->hasMany(ProductProcessRate::class, 'process_name', 'process_name');
+        return $this->hasMany(ProductProcessRate::class, 'production_process_id');
+    }
+
+    public function workers()
+    {
+        return $this->hasMany(Worker::class, 'production_process_id');
+    }
+
+    public function dailyProductions()
+    {
+        return $this->hasMany(DailyProduction::class, 'production_process_id');
     }
 }

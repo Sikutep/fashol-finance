@@ -17,28 +17,33 @@ import {
 export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout }) {
   const menuSections = [
     {
-      title: 'UTAMA',
+      title: 'RINGKASAN OWNER',
       items: [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
       ],
     },
     {
-      title: 'OPERASIONAL',
+      title: 'RUTINITAS OPERASIONAL',
       items: [
-        { id: 'master-pekerja', label: 'Master Pekerja', icon: Users },
-        { id: 'master-proses', label: 'Master Proses', icon: Scissors },
-        { id: 'produksi-harian', label: 'Produksi Harian', icon: Activity },
-        { id: 'payroll-mingguan', label: 'Payroll Mingguan', icon: CreditCard },
-        { id: 'payroll-bulanan', label: 'Payroll Bulanan', icon: Calendar },
+        { id: 'produksi-harian', label: '1. Produksi Harian', icon: Activity },
+        { id: 'keuangan', label: '2. Catatan Keuangan', icon: Landmark },
+        { id: 'payroll-mingguan', label: '3. Gaji Mingguan', icon: CreditCard },
+        { id: 'payroll-bulanan', label: '4. Gaji Bulanan', icon: Calendar },
       ],
     },
     {
-      title: 'FINANCE',
+      title: 'PEMBUKUAN & LAPORAN',
       items: [
-        { id: 'hpp-produk', label: 'HPP Produk', icon: Layers },
-        { id: 'keuangan', label: 'Keuangan', icon: Landmark },
         { id: 'biaya-produksi', label: 'Biaya Produksi', icon: BarChart3 },
-        { id: 'laporan-finance', label: 'Laporan Finance', icon: FileText },
+        { id: 'laporan-finance', label: 'Laporan Laba Rugi', icon: FileText },
+        { id: 'hpp-produk', label: 'HPP Produk', icon: Layers },
+      ],
+    },
+    {
+      title: 'DATA MASTER PABRIK',
+      items: [
+        { id: 'master-pekerja', label: 'Master Pekerja', icon: Users },
+        { id: 'master-proses', label: 'Master Proses & Tarif', icon: Scissors },
       ],
     },
   ];
@@ -82,20 +87,20 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
                   <button
                     key={item.id}
                     onClick={() => setActiveTab(item.id)}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                    className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                       isActive
                         ? 'bg-[#15352A] text-white shadow-sm font-semibold'
                         : 'text-[#98AFA5] hover:text-white hover:bg-[#122E24]'
                     }`}
                   >
-                    <div className="flex items-center gap-3.5">
-                      <Icon className={`w-5 h-5 ${isActive ? 'text-[#EAB308]' : 'text-[#668377]'}`} />
-                      <span>{item.label}</span>
+                    <div className="flex items-center gap-3">
+                      <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-[#EAB308]' : 'text-[#668377]'}`} />
+                      <span className="text-sm font-medium">{item.label}</span>
                     </div>
 
                     {/* Active Indicator Bar on the Right */}
                     {isActive && (
-                      <div className="w-1.5 h-5 rounded-full bg-[#EAB308]" />
+                      <div className="w-1.5 h-5 rounded-full bg-[#EAB308] shrink-0" />
                     )}
                   </button>
                 );

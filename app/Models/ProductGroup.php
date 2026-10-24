@@ -24,4 +24,14 @@ class ProductGroup extends Model
     {
         return $this->hasMany(ProductProcessRate::class);
     }
+
+    public function hppComponent()
+    {
+        return $this->hasOne(ProductHppComponent::class, 'product_group_id');
+    }
+
+    public function dailyProductionItems()
+    {
+        return $this->hasMany(DailyProductionItem::class, 'product_group_id');
+    }
 }

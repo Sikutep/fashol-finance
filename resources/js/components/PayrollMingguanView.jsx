@@ -16,8 +16,8 @@ import {
   FileText,
   Layers,
   CheckSquare,
-  Square,
-  RotateCcw
+  RotateCcw,
+  AlertCircle
 } from 'lucide-react';
 import { useLoading } from '../context/LoadingContext';
 import PrintSlipModal from './PrintSlipModal';
@@ -39,6 +39,7 @@ export default function PayrollMingguanView({ currentRole }) {
   const [isSlipPrintOpen, setIsSlipPrintOpen] = useState(false);
   const [slipPrintList, setSlipPrintList] = useState([]);
   const [isReportPrintOpen, setIsReportPrintOpen] = useState(false);
+  const [isPayConfirmOpen, setIsPayConfirmOpen] = useState(false);
 
   const fetchPayroll = async (periodToFetch = selectedPeriod, cycleToFetch = activeCycle) => {
     try {
@@ -377,8 +378,8 @@ export default function PayrollMingguanView({ currentRole }) {
               {currentRole === 'owner' ? (
                 <>
                   <button
-                    onClick={handleBayar}
-                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-all text-sm flex items-center gap-2"
+                    onClick={() => setIsPayConfirmOpen(true)}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-all text-sm flex items-center gap-2 cursor-pointer"
                   >
                     <DollarSign className="w-4 h-4" />
                     <span>Tandai Sudah Dibayar</span>
@@ -462,6 +463,49 @@ export default function PayrollMingguanView({ currentRole }) {
         </button>
       </div>
 
+      {/* Stepped Status Tracker (Alur SPK Visual) */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-xs">
+        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+          <span>Tahapan Alur Penggajian SPK:</span>
+          <span className="text-xs font-semibold text-slate-600">
+            Posisi Saat Ini: <strong className="text-emerald-700 underline underline-offset-2">{displayStatus}</strong>
+          </span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+          {[
+            { step: 1, title: 'Draft', desc: 'Dihitung dari Produksi Harian', active: ['Draft', 'Diperiksa', 'Disetujui', 'Dibayar'].includes(displayStatus), current: displayStatus === 'Draft' },
+            { step: 2, title: 'Diperiksa', desc: 'Diajukan Kasir ke Owner', active: ['Diperiksa', 'Disetujui', 'Dibayar'].includes(displayStatus), current: displayStatus === 'Diperiksa' },
+            { step: 3, title: 'Disetujui', desc: 'ACC Owner / Siap Dicairkan', active: ['Disetujui', 'Dibayar'].includes(displayStatus), current: displayStatus === 'Disetujui' },
+            { step: 4, title: 'Dibayar', desc: 'Lunas Diserahkan ke Pekerja', active: ['Dibayar'].includes(displayStatus), current: displayStatus === 'Dibayar' },
+          ].map((st) => (
+            <div 
+              key={st.step}
+              className={`p-3 rounded-xl border transition-all ${
+                st.current 
+                  ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-400/40 shadow-2xs'
+                  : st.active
+                  ? 'bg-slate-50 border-slate-200 text-slate-700'
+                  : 'bg-white border-dashed border-slate-200 opacity-50'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${
+                  st.current 
+                    ? 'bg-emerald-600 text-white animate-pulse'
+                    : st.active
+                    ? 'bg-slate-700 text-white'
+                    : 'bg-slate-200 text-slate-500'
+                }`}>
+                  {st.step}
+                </span>
+                <span className="font-bold text-xs sm:text-sm text-slate-900">{st.title}</span>
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1 leading-tight">{st.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Hero Stat Banner: Dark Slate with Green Accent */}
       <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 sm:p-10 text-white shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -520,7 +564,7 @@ export default function PayrollMingguanView({ currentRole }) {
               TOTAL BIAYA UPAH BORONGAN
             </div>
             <div className="text-4xl sm:text-5xl font-extrabold text-white mt-1 tracking-tight">
-              {data?.summary?.formatted_payroll || 'Rp 0'}
+              {data?.summary?.formatted_payroll || data?.formatted_total_payroll || 'Rp 0'}
             </div>
           </div>
 
@@ -528,19 +572,19 @@ export default function PayrollMingguanView({ currentRole }) {
             <div>
               <div className="text-xs text-slate-300">Total Output Fisik</div>
               <div className="text-xl font-bold text-emerald-400 mt-1">
-                {data?.summary?.formatted_qty || '0 pcs'}
+                {data?.summary?.formatted_qty || (items.reduce((acc, i) => acc + (i.total_qty || 0), 0) + ' pcs')}
               </div>
             </div>
             <div>
               <div className="text-xs text-slate-300">Pekerja Aktif</div>
               <div className="text-xl font-bold text-white mt-1">
-                {data?.summary?.total_workers || 0} Orang
+                {data?.summary?.total_workers ?? items.length} Orang
               </div>
             </div>
             <div>
               <div className="text-xs text-slate-300">Total Transaksi Produksi</div>
               <div className="text-xl font-bold text-white mt-1">
-                {data?.summary?.total_transactions || 0} Catatan
+                {data?.summary?.total_transactions ?? items.reduce((acc, i) => acc + (i.details?.length || 0), 0)} Catatan
               </div>
             </div>
           </div>
@@ -882,6 +926,85 @@ export default function PayrollMingguanView({ currentRole }) {
           total_wage: data?.summary?.formatted_payroll || 'Rp 0',
         }}
       />
+
+      {/* Cash Payout Confirmation Modal Dialog */}
+      {isPayConfirmOpen && (() => {
+        const totalWageNum = Number(data?.summary?.total_payroll ?? data?.total_payroll ?? 0);
+        const isZeroWage = totalWageNum <= 0 || filteredItems.length === 0;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center mb-4">
+                <DollarSign className="w-6 h-6" />
+              </div>
+              <h3 className="text-xl font-extrabold text-slate-900">
+                Konfirmasi Pencairan Upah Mingguan
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Pastikan dana upah tunai telah disiapkan sebelum menandai payroll ini telah dibayar lunas kepada pekerja.
+              </p>
+
+              <div className="my-5 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Kelompok Kerja:</span>
+                  <span className="font-bold text-slate-900 uppercase">
+                    {activeCycle === 'kamis' ? 'Kelompok Kamis (Jahit & Potong)' : activeCycle === 'sabtu' ? 'Kelompok Sabtu (Finishing & QC)' : 'Semua Kelompok'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Periode Kerja:</span>
+                  <span className="font-semibold text-slate-800">{selectedPeriod || data?.period}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Jumlah Pekerja:</span>
+                  <span className="font-bold text-slate-900">{data?.summary?.total_workers ?? filteredItems.length} Orang</span>
+                </div>
+                <div className="flex justify-between border-t border-slate-200 pt-2.5 text-sm">
+                  <span className="font-bold text-slate-700">Total Upah yang Dibayarkan:</span>
+                  <span className="font-extrabold text-emerald-700">{data?.summary?.formatted_payroll || data?.formatted_total_payroll || 'Rp 0'}</span>
+                </div>
+              </div>
+
+              {isZeroWage && (
+                <div className="mb-5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <span>
+                    Belum ada catatan setoran upah (Total Rp 0) pada periode ini. Pelunasan tidak dapat diproses jika total upah masih nol.
+                  </span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPayConfirmOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-sm font-semibold text-slate-600 transition-colors cursor-pointer"
+                >
+                  Periksa Rincian Dulu
+                </button>
+                <button
+                  type="button"
+                  disabled={isZeroWage}
+                  onClick={() => {
+                    if (isZeroWage) return;
+                    setIsPayConfirmOpen(false);
+                    handleBayar();
+                  }}
+                  className={`px-5 py-2.5 rounded-xl text-sm font-bold text-white shadow-md transition-all flex items-center gap-2 ${
+                    isZeroWage
+                      ? 'bg-slate-300 cursor-not-allowed opacity-60'
+                      : 'bg-emerald-600 hover:bg-emerald-700 cursor-pointer'
+                  }`}
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Ya, Uang Sudah Diserahkan (Lunas)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

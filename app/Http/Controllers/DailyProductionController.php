@@ -9,6 +9,7 @@ use App\Models\Worker;
 use App\Models\ProductProcessRate;
 use App\Models\Product;
 use App\Models\ProductGroup;
+use App\Models\ProductionProcess;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
@@ -165,7 +166,7 @@ class DailyProductionController extends Controller
         $processName = $validated['process_name'] ?? null;
 
         $procRecord = \App\Models\ProductionProcess::where('process_name', $processName)->first();
-        $payrollDay = $procRecord->payroll_day ?? (in_array($processName, ['Potong', 'Jahit', 'Overdek', 'Kansay']) ? 'Kamis' : 'Sabtu');
+        $payrollDay = $procRecord?->payroll_day ?? ($worker->payroll_day ?: 'Kamis');
 
         if ($payrollDay === 'Sabtu') {
             $cycleStart = ($prodDate->dayOfWeek === Carbon::SATURDAY) ? $prodDate->copy()->startOfDay() : $prodDate->copy()->previous(Carbon::SATURDAY)->startOfDay();
@@ -308,8 +309,14 @@ class DailyProductionController extends Controller
                     $productModel = Product::where('name', 'like', "%{$item['product_name']}%")->first() ?? Product::first();
                 }
 
+                $groupId = $productModel?->product_group_id ?? ($group?->id ?? null);
+                if (!$groupId && !empty($item['product_name'])) {
+                    $groupId = ProductGroup::where('name', $item['product_name'])->value('id');
+                }
+
                 $preparedItems[] = [
                     'product_id' => $productModel?->id,
+                    'product_group_id' => $groupId,
                     'product_name' => $item['product_name'],
                     'variation' => $item['variation'] ?? 'All Size',
                     'color' => $item['color'] ?? 'Black',
@@ -330,10 +337,13 @@ class DailyProductionController extends Controller
                 $trxNumber = 'PRD-' . $datePart . str_pad($seq, 2, '0', STR_PAD_LEFT);
             }
 
+            $procRecord = ProductionProcess::where('process_name', $validated['process_name'])->first();
+
             $production = DailyProduction::create([
                 'transaction_number' => $trxNumber,
                 'production_date' => $validated['production_date'],
                 'worker_id' => $validated['worker_id'],
+                'production_process_id' => $procRecord?->id,
                 'process_name' => $validated['process_name'],
                 'total_qty' => $totalQty,
                 'total_wage' => $totalWage,

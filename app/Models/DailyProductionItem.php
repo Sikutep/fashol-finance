@@ -12,6 +12,7 @@ class DailyProductionItem extends Model
     protected $fillable = [
         'daily_production_id',
         'product_id',
+        'product_group_id',
         'product_name',
         'variation',
         'color',
@@ -21,6 +22,9 @@ class DailyProductionItem extends Model
     ];
 
     protected $casts = [
+        'daily_production_id' => 'integer',
+        'product_id' => 'integer',
+        'product_group_id' => 'integer',
         'qty' => 'integer',
         'rate' => 'float',
         'total_wage' => 'float',
@@ -33,6 +37,11 @@ class DailyProductionItem extends Model
 
     public function product()
     {
-        return $this->belongsTo(Product::class);
+        return $this->belongsTo(Product::class)->withTrashed();
+    }
+
+    public function productGroup()
+    {
+        return $this->belongsTo(ProductGroup::class, 'product_group_id');
     }
 }

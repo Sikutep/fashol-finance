@@ -76,15 +76,9 @@ class FinanceExtendedController extends Controller
             $cycle = 'all';
         }
 
-        // Resolusi daftar nama proses per siklus
+        // Resolusi daftar nama proses per siklus murni dari database (Single Source of Truth)
         $kamisProcesses = \App\Models\ProductionProcess::where('payroll_day', 'Kamis')->pluck('process_name')->toArray();
-        if (empty($kamisProcesses)) {
-            $kamisProcesses = ['Potong', 'Jahit', 'Overdek', 'Kansay'];
-        }
         $sabtuProcesses = \App\Models\ProductionProcess::where('payroll_day', 'Sabtu')->pluck('process_name')->toArray();
-        if (empty($sabtuProcesses)) {
-            $sabtuProcesses = ['QC', 'QC Borongan', 'Rambuan', 'Lipat Celana', 'OPP', 'Benang', 'Bordir'];
-        }
 
         $targetProcesses = match($cycle) {
             'kamis' => $kamisProcesses,
@@ -258,7 +252,7 @@ class FinanceExtendedController extends Controller
                 // Pada tab 'all', siklus ditentukan oleh Master Proses dari transaksi riil yang dikerjakan
                 $firstProc = $workerProductions->first()['process_name'] ?? ($g->worker?->process ?? null);
                 $procRecord = \App\Models\ProductionProcess::where('process_name', $firstProc)->first();
-                $workerCycle = $procRecord?->payroll_day ?? (in_array($firstProc, $kamisProcesses) ? 'Kamis' : 'Sabtu');
+                $workerCycle = $procRecord?->payroll_day ?? ($g->worker?->payroll_day ?? 'Kamis');
             }
 
             $items[] = [
@@ -268,6 +262,7 @@ class FinanceExtendedController extends Controller
                 'worker_name' => $g->worker ? $g->worker->name : 'Pekerja #' . $g->worker_id,
                 'payroll_day' => $workerCycle,
                 'period' => $periodLabel,
+                'payment_date' => $paymentDate,
                 'total_qty' => (int) $g->total_qty,
                 'formatted_qty' => (int) $g->total_qty . ' pcs',
                 'total_wage' => (float) $g->total_wage,
@@ -309,6 +304,10 @@ class FinanceExtendedController extends Controller
             'all' => 'Semua Siklus (Kamis & Sabtu)',
         ];
 
+        $totalQty = (int) $grouped->sum('total_qty');
+        $totalTransactions = (int) $grouped->sum('total_trx');
+        $totalWorkers = $grouped->count();
+
         return response()->json([
             'status' => 'success',
             'cycle' => $cycle,
@@ -320,6 +319,14 @@ class FinanceExtendedController extends Controller
             'payment_date' => $paymentDate,
             'total_payroll' => $totalPayroll,
             'formatted_total_payroll' => 'Rp ' . number_format($totalPayroll, 0, ',', '.'),
+            'summary' => [
+                'total_payroll' => $totalPayroll,
+                'formatted_payroll' => 'Rp ' . number_format($totalPayroll, 0, ',', '.'),
+                'total_qty' => $totalQty,
+                'formatted_qty' => number_format($totalQty, 0, ',', '.') . ' pcs',
+                'total_workers' => $totalWorkers,
+                'total_transactions' => $totalTransactions,
+            ],
             'status_label' => $statusLabelMap[$determinedStatus] ?? 'Draft Pengajuan',
             'available_periods' => $availablePeriods,
             'data' => $items,
@@ -371,13 +378,7 @@ class FinanceExtendedController extends Controller
         }
 
         $kamisProcesses = \App\Models\ProductionProcess::where('payroll_day', 'Kamis')->pluck('process_name')->toArray();
-        if (empty($kamisProcesses)) {
-            $kamisProcesses = ['Potong', 'Jahit', 'Overdek', 'Kansay'];
-        }
         $sabtuProcesses = \App\Models\ProductionProcess::where('payroll_day', 'Sabtu')->pluck('process_name')->toArray();
-        if (empty($sabtuProcesses)) {
-            $sabtuProcesses = ['QC', 'QC Borongan', 'Rambuan', 'Lipat Celana', 'OPP', 'Benang', 'Bordir'];
-        }
 
         $targetProcesses = match($cycle) {
             'kamis' => $kamisProcesses,
@@ -455,10 +456,10 @@ class FinanceExtendedController extends Controller
 
         $query->where('period', $periodLabel);
 
-        // Hanya tampilkan slip payroll yang sah: yang sudah 'Dibayar' (arsip keuangan)
+        // Tampilkan slip payroll yang sudah masuk proses (Diperiksa, Disetujui, Dibayar)
         // ATAU pekerjanya berstatus aktif di master (tidak di-soft-delete)
         $query->where(function ($q) {
-            $q->where('status', 'Dibayar')
+            $q->whereIn('status', ['Diperiksa', 'Disetujui', 'Dibayar'])
               ->orWhereHas('worker', function ($wq) {
                   $wq->whereNull('deleted_at');
               });
@@ -614,17 +615,9 @@ class FinanceExtendedController extends Controller
                 $basicSalary = (float) $w->default_salary;
                 $allowance = 0.0;
             } else {
-                $pos = strtolower(($w->process ?? '') . ' ' . ($w->type ?? '') . ' ' . ($w->name ?? ''));
-                if (str_contains($pos, 'owner') || str_contains($pos, 'manajemen')) {
-                    $basicSalary = 4500000.0;
-                    $allowance = 1000000.0;
-                } elseif (str_contains($pos, 'finance') || str_contains($pos, 'kasir') || str_contains($pos, 'accounting')) {
-                    $basicSalary = 3000000.0;
-                    $allowance = 500000.0;
-                } else {
-                    $basicSalary = 2800000.0;
-                    $allowance = 500000.0;
-                }
+                // Tidak ada hardcode angka rupiah; jika belum diset maka 0.0
+                $basicSalary = 0.0;
+                $allowance = 0.0;
             }
 
             $overtime = 0.0;
@@ -639,6 +632,7 @@ class FinanceExtendedController extends Controller
             MonthlyPayroll::create([
                 'payroll_number' => $pNumber,
                 'worker_id' => $w->id,
+                'staff_position_id' => $w->staff_position_id ?? \App\Models\StaffPosition::where('name', $w->process)->value('id'),
                 'worker_name' => $w->name,
                 'position' => $w->process ?: 'Staff Operasional',
                 'period' => $periodLabel,
@@ -662,7 +656,7 @@ class FinanceExtendedController extends Controller
                 ->latest('id')
                 ->first();
 
-            $worker = Worker::find($p->worker_id);
+            $worker = Worker::withTrashed()->find($p->worker_id);
 
             if ($lastPayroll && (float)$lastPayroll->basic_salary > 0) {
                 $basicSalary = (float) $lastPayroll->basic_salary;
@@ -671,17 +665,9 @@ class FinanceExtendedController extends Controller
                 $basicSalary = (float) $worker->default_salary;
                 $allowance = 0.0;
             } else {
-                $pos = strtolower(($p->position ?? '') . ' ' . ($p->worker_name ?? ''));
-                if (str_contains($pos, 'owner') || str_contains($pos, 'manajemen')) {
-                    $basicSalary = 4500000.0;
-                    $allowance = 1000000.0;
-                } elseif (str_contains($pos, 'finance') || str_contains($pos, 'kasir') || str_contains($pos, 'accounting')) {
-                    $basicSalary = 3000000.0;
-                    $allowance = 500000.0;
-                } else {
-                    $basicSalary = 2800000.0;
-                    $allowance = 500000.0;
-                }
+                // Tidak ada hardcode angka rupiah; jika belum diset maka 0.0
+                $basicSalary = 0.0;
+                $allowance = 0.0;
             }
 
             $p->update([
@@ -830,6 +816,7 @@ class FinanceExtendedController extends Controller
                     })->sum('rate');
 
                 ProductHppComponent::create([
+                    'product_group_id' => $g->id,
                     'product_name' => $g->name,
                     'product_code' => 'PRD-' . $cleanCode,
                     'code' => $code,
@@ -840,6 +827,8 @@ class FinanceExtendedController extends Controller
                     'effective_date' => Carbon::now(),
                     'status' => 'Aktif',
                 ]);
+            } elseif (!$hpp->product_group_id) {
+                $hpp->update(['product_group_id' => $g->id]);
             }
         }
     }
@@ -1006,10 +995,31 @@ class FinanceExtendedController extends Controller
             $type = 'expense';
         }
 
+        $matchedCat = \App\Models\FinanceCategory::where('name', $validated['category'])->first();
+        $costType = $matchedCat?->cost_type;
+        $catId = $matchedCat?->id;
+
+        if (!$costType) {
+            $cLower = strtolower($validated['category'] . ' ' . $validated['title']);
+            if (str_contains($cLower, 'bahan') || str_contains($cLower, 'kain') || str_contains($cLower, 'benang')) {
+                $costType = 'material';
+            } elseif (str_contains($cLower, 'jasa') || str_contains($cLower, 'sablon') || str_contains($cLower, 'bordir')) {
+                $costType = 'service';
+            } elseif (str_contains($cLower, 'repair') || str_contains($cLower, 'rework') || str_contains($cLower, 'reject') || str_contains($cLower, 'service')) {
+                $costType = 'repair';
+            } elseif (str_contains($cLower, 'listrik') || str_contains($cLower, 'air') || str_contains($cLower, 'overhead') || str_contains($cLower, 'utilitas') || str_contains($cLower, 'sewa') || str_contains($cLower, 'konsumsi produksi')) {
+                $costType = 'overhead';
+            } else {
+                $costType = 'general_operating';
+            }
+        }
+
         $trx = FinanceTransaction::create([
             'transaction_number' => $trxNumber,
             'type' => $type,
             'category' => $validated['category'],
+            'cost_type' => $costType,
+            'category_id' => $catId,
             'title' => $validated['title'],
             'amount' => $validated['amount'],
             'transaction_date' => $validated['transaction_date'],
@@ -1044,9 +1054,30 @@ class FinanceExtendedController extends Controller
             $type = 'expense';
         }
 
+        $matchedCat = \App\Models\FinanceCategory::where('name', $validated['category'])->first();
+        $costType = $matchedCat?->cost_type;
+        $catId = $matchedCat?->id;
+
+        if (!$costType) {
+            $cLower = strtolower($validated['category'] . ' ' . $validated['title']);
+            if (str_contains($cLower, 'bahan') || str_contains($cLower, 'kain') || str_contains($cLower, 'benang')) {
+                $costType = 'material';
+            } elseif (str_contains($cLower, 'jasa') || str_contains($cLower, 'sablon') || str_contains($cLower, 'bordir')) {
+                $costType = 'service';
+            } elseif (str_contains($cLower, 'repair') || str_contains($cLower, 'rework') || str_contains($cLower, 'reject') || str_contains($cLower, 'service')) {
+                $costType = 'repair';
+            } elseif (str_contains($cLower, 'listrik') || str_contains($cLower, 'air') || str_contains($cLower, 'overhead') || str_contains($cLower, 'utilitas') || str_contains($cLower, 'sewa') || str_contains($cLower, 'konsumsi produksi')) {
+                $costType = 'overhead';
+            } else {
+                $costType = 'general_operating';
+            }
+        }
+
         $trx->update([
             'type' => $type,
             'category' => $validated['category'],
+            'cost_type' => $costType,
+            'category_id' => $catId,
             'title' => $validated['title'],
             'amount' => $validated['amount'],
             'transaction_date' => $validated['transaction_date'],
@@ -1237,38 +1268,62 @@ class FinanceExtendedController extends Controller
         $totalOutput = (int) (clone $dailyQuery)->sum('total_qty');
 
         $matExpense = (float) (clone $expenseQuery)->where(function($q) {
-            $q->where('category', 'like', '%Bahan%')
-              ->orWhere('category', 'like', '%Kain%')
-              ->orWhere('category', 'like', '%Benang%')
-              ->orWhere('title', 'like', '%Bahan%')
-              ->orWhere('title', 'like', '%Kain%')
-              ->orWhere('title', 'like', '%Benang%');
+            $q->where('cost_type', 'material')
+              ->orWhere(function($sub) {
+                  $sub->whereNull('cost_type')
+                      ->where(function($sq) {
+                          $sq->where('category', 'like', '%Bahan%')
+                            ->orWhere('category', 'like', '%Kain%')
+                            ->orWhere('category', 'like', '%Benang%')
+                            ->orWhere('title', 'like', '%Bahan%')
+                            ->orWhere('title', 'like', '%Kain%')
+                            ->orWhere('title', 'like', '%Benang%');
+                      });
+              });
         })->sum('amount');
 
         $serviceExpense = (float) (clone $expenseQuery)->where(function($q) {
-            $q->where('category', 'like', '%Jasa%')
-              ->orWhere('category', 'like', '%Maklon%')
-              ->orWhere('title', 'like', '%Jasa%')
-              ->orWhere('title', 'like', '%Sablon%')
-              ->orWhere('title', 'like', '%Bordir%');
+            $q->where('cost_type', 'service')
+              ->orWhere(function($sub) {
+                  $sub->whereNull('cost_type')
+                      ->where(function($sq) {
+                          $sq->where('category', 'like', '%Jasa%')
+                            ->orWhere('category', 'like', '%Maklon%')
+                            ->orWhere('title', 'like', '%Jasa%')
+                            ->orWhere('title', 'like', '%Sablon%')
+                            ->orWhere('title', 'like', '%Bordir%');
+                      });
+              });
         })->sum('amount');
 
         $repairExpense = (float) (clone $expenseQuery)->where(function($q) {
-            $q->where('category', 'like', '%Repair%')
-              ->orWhere('title', 'like', '%Repair%')
-              ->orWhere('title', 'like', '%Rework%')
-              ->orWhere('title', 'like', '%Reject%');
+            $q->where('cost_type', 'repair')
+              ->orWhere(function($sub) {
+                  $sub->whereNull('cost_type')
+                      ->where(function($sq) {
+                          $sq->where('category', 'like', '%Repair%')
+                            ->orWhere('title', 'like', '%Repair%')
+                            ->orWhere('title', 'like', '%Rework%')
+                            ->orWhere('title', 'like', '%Reject%');
+                      });
+              });
         })->sum('amount');
 
         $overheadCost = (float) (clone $expenseQuery)->where(function($q) {
-            $q->where('category', 'like', '%Overhead%')
-              ->orWhere('title', 'like', '%Overhead%')
-              ->orWhere('category', 'like', '%Konsumsi Produksi%')
-              ->orWhere('category', 'like', '%Penyusutan Mesin%')
-              ->orWhere('category', 'like', '%Peralatan Konveksi%')
-              ->orWhere('category', 'like', '%Pemeliharaan%')
-              ->orWhere('category', 'like', '%ATK Konveksi%')
-              ->orWhere('category', 'like', '%Operasional & Utilitas%');
+            $q->where('cost_type', 'overhead')
+              ->orWhere(function($sub) {
+                  $sub->whereNull('cost_type')
+                      ->where(function($sq) {
+                          $sq->where('category', 'like', '%Overhead%')
+                            ->orWhere('title', 'like', '%Overhead%')
+                            ->orWhere('category', 'like', '%Konsumsi Produksi%')
+                            ->orWhere('category', 'like', '%Penyusutan Mesin%')
+                            ->orWhere('category', 'like', '%Peralatan Konveksi%')
+                            ->orWhere('category', 'like', '%Pemeliharaan%')
+                            ->orWhere('category', 'like', '%ATK Konveksi%')
+                            ->orWhere('category', 'like', '%Operasional & Utilitas%');
+                      });
+              });
         })->sum('amount');
 
         // Jika ada output produksi tetapi belum ada kas keluar pembelian bahan di periode ini,
@@ -1373,55 +1428,23 @@ class FinanceExtendedController extends Controller
 
     public static function getOfficialFinanceCategories(): array
     {
+        $cats = \App\Models\FinanceCategory::where('is_active', true)->orderBy('id')->get();
+        if ($cats->isNotEmpty()) {
+            return [
+                'income' => $cats->where('group', 'income')->pluck('name')->values()->toArray(),
+                'deductions' => $cats->where('group', 'deductions')->pluck('name')->values()->toArray(),
+                'cogs' => $cats->where('group', 'cogs')->pluck('name')->values()->toArray(),
+                'operating_expenses' => $cats->where('group', 'operating_expenses')->pluck('name')->values()->toArray(),
+                'non_operating_expenses' => $cats->where('group', 'non_operating_expenses')->pluck('name')->values()->toArray(),
+            ];
+        }
+
         return [
-            'income' => [
-                'Penjualan Produk',
-                'Pendapatan Jasa Maklon',
-                'Pendapatan Lain-lain',
-            ],
-            'deductions' => [
-                'Potongan Penjualan',
-                'Retur Penjualan',
-            ],
-            'cogs' => [
-                'Harga Pokok Penjualan',
-            ],
-            'operating_expenses' => [
-                'Beban Promosi / Iklan',
-                'Beban Endorse/Pemasaran',
-                'Beban Gaji Karyawan',
-                'Beban Listrik',
-                'Beban Air',
-                'Beban Internet',
-                'Beban ATK Admin',
-                'Beban Sewa',
-                'Beban Kesejahteraan Karyawan',
-                'Beban Asuransi',
-                'Beban Penyusutan Mesin',
-                'Beban Penyusutan Kendaraan',
-                'Beban Penyusutan Peralatan Kantor',
-                'Beban Penyusutan Peralatan Konveksi',
-                'Beban Perlengkapan',
-                'Beban Gaji',
-                'Beban Konsumsi Admin',
-                'Beban Konsumsi Produksi',
-                'Beban ATK Konveksi',
-                'Beban Transportasi',
-                'Beban Kendaraan',
-                'Beban Pengiriman',
-                'Beban Service',
-                'Beban Pemeliharaan',
-                'Beban Kebersihan',
-                'Beban Operasional Admin',
-                'Beban Lain-lain',
-            ],
-            'non_operating_expenses' => [
-                'Beban Bank',
-                'Beban PPh Final',
-                'Beban Legalitas',
-                'Beban Pajak dan Perizinan',
-                'Beban Zakat',
-            ],
+            'income' => ['Penjualan Produk', 'Pendapatan Jasa Maklon', 'Pendapatan Lain-lain'],
+            'deductions' => ['Potongan Penjualan', 'Retur Penjualan'],
+            'cogs' => ['Harga Pokok Penjualan', 'Bahan Baku Kain', 'Aksesoris Jahit'],
+            'operating_expenses' => [],
+            'non_operating_expenses' => [],
         ];
     }
 

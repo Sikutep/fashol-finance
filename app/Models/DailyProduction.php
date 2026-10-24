@@ -13,6 +13,7 @@ class DailyProduction extends Model
         'transaction_number',
         'production_date',
         'worker_id',
+        'production_process_id',
         'process_name',
         'total_qty',
         'total_wage',
@@ -23,13 +24,20 @@ class DailyProduction extends Model
 
     protected $casts = [
         'production_date' => 'date',
+        'worker_id' => 'integer',
+        'production_process_id' => 'integer',
         'total_qty' => 'integer',
         'total_wage' => 'float',
     ];
 
     public function worker()
     {
-        return $this->belongsTo(Worker::class);
+        return $this->belongsTo(Worker::class)->withTrashed();
+    }
+
+    public function productionProcess()
+    {
+        return $this->belongsTo(ProductionProcess::class, 'production_process_id');
     }
 
     public function items()

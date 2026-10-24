@@ -24,6 +24,7 @@ export default function LaporanLabaRugiView({ currentRole, onNavigate }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isReportPrintOpen, setIsReportPrintOpen] = useState(false);
+  const [hideZeroExpenses, setHideZeroExpenses] = useState(false);
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -91,64 +92,6 @@ export default function LaporanLabaRugiView({ currentRole, onNavigate }) {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
-      
-      {/* 7 SPK Reports Navigation Hub */}
-      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
-        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2 py-0.5 mb-1.5">
-          Pusat Laporan Finance (7 Laporan SPK)
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#15352A] text-white shadow-xs"
-          >
-            1. Laba Rugi Operasional (Aktif)
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigate && onNavigate('biaya-produksi')}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
-          >
-            2. Rekap Biaya Produksi
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigate && onNavigate('payroll-mingguan')}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
-          >
-            3. Rekap Payroll Mingguan
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigate && onNavigate('payroll-bulanan')}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
-          >
-            4. Rekap Payroll Bulanan
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigate && onNavigate('keuangan')}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
-          >
-            5. Kas Masuk & Kas Keluar
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigate && onNavigate('keuangan')}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
-          >
-            6. Rekap Beban Operasional
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigate && onNavigate('hpp-produk')}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
-          >
-            7. Rekap HPP Produk
-          </button>
-        </div>
-      </div>
-      
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
         <div>
@@ -238,6 +181,43 @@ export default function LaporanLabaRugiView({ currentRole, onNavigate }) {
             <Download className="w-4 h-4 text-emerald-600" />
             <span className="hidden sm:inline">Ekspor Excel</span>
           </button>
+        </div>
+      </div>
+
+      {/* Human-readable Owner Verdict Banner */}
+      <div className={`p-5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+        summary.is_profitable 
+          ? 'bg-emerald-50 border-emerald-300 text-emerald-950 shadow-xs'
+          : 'bg-rose-50 border-rose-300 text-rose-950 shadow-xs'
+      }`}>
+        <div className="flex items-center gap-3.5">
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-xs ${
+            summary.is_profitable ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
+          }`}>
+            {summary.is_profitable ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-wider font-extrabold text-slate-500">
+              Kesimpulan Finansial Bulan {months.find(m => m.num === selectedMonth)?.name} {selectedYear}:
+            </div>
+            <div className="text-lg sm:text-xl font-black mt-0.5">
+              {summary.is_profitable ? (
+                <span>Konveksi <strong className="text-emerald-700">MENDAPATKAN LABA BERSIH {summary.formatted_net_profit}</strong></span>
+              ) : (
+                <span>Konveksi <strong className="text-rose-700">MENGALAMI RUGI {summary.formatted_net_profit}</strong></span>
+              )}
+            </div>
+            <div className="text-xs text-slate-600 mt-0.5">
+              Dari omzet bersih {summary.formatted_net_sales}, setelah dikurangi modal baju ({summary.formatted_cogs}) dan operasional ({summary.formatted_total_operating_expenses}).
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center sm:flex-col sm:items-end justify-between border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200/80 shrink-0">
+          <div className="text-xs font-semibold text-slate-500">Margin Bersih</div>
+          <div className={`text-xl font-black ${summary.is_profitable ? 'text-emerald-700' : 'text-rose-700'}`}>
+            {summary.net_sales > 0 ? ((summary.net_profit / summary.net_sales) * 100).toFixed(1) + '%' : '0%'}
+          </div>
         </div>
       </div>
 
@@ -379,17 +359,32 @@ export default function LaporanLabaRugiView({ currentRole, onNavigate }) {
 
           {/* 3. SEKSI BIAYA OPERASIONAL (27 AKUN RESMI) */}
           <div className="p-6 bg-slate-50/50">
-            <div className="flex justify-between items-center mb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
               <div className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">
                 3. BIAYA OPERASIONAL (27 POS BEBAN RESMI)
               </div>
-              <span className="text-xs text-slate-500">
-                Total Pos: {data?.operating_expenses?.length || 0} Akun
-              </span>
+              <div className="flex items-center gap-3">
+                <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 bg-white px-3 py-1 rounded-lg border border-slate-200/90 hover:bg-slate-50 cursor-pointer shadow-2xs">
+                  <input
+                    type="checkbox"
+                    checked={hideZeroExpenses}
+                    onChange={(e) => setHideZeroExpenses(e.target.checked)}
+                    className="w-3.5 h-3.5 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                  />
+                  <span>Sembunyikan Pos Beban Rp 0</span>
+                </label>
+                <span className="text-xs text-slate-400">
+                  {hideZeroExpenses 
+                    ? `${(data?.operating_expenses || []).filter(it => it.amount > 0).length} Akun Aktif` 
+                    : `Total: ${data?.operating_expenses?.length || 0} Akun`}
+                </span>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-1">
-              {data?.operating_expenses?.map((item, idx) => (
+              {(data?.operating_expenses || [])
+                .filter(item => !hideZeroExpenses || Number(item.amount) > 0)
+                .map((item, idx) => (
                 <div 
                   key={idx} 
                   className={`flex justify-between items-center py-2 px-3 rounded-lg text-xs sm:text-sm ${

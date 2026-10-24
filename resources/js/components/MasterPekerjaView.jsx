@@ -13,20 +13,6 @@ import {
 } from 'lucide-react';
 import { useLoading } from '../context/LoadingContext';
 
-const STAFF_POSITIONS = [
-  'Owner / Manajemen',
-  'Finance / Kasir',
-  'Admin / Operasional',
-  'Legal',
-  'Konten Spesialis',
-  'Host Live',
-  'Driver / Gudang',
-  'Packing',
-  'PIC Konveksi',
-  'PIC QC',
-  'Staf Konveksi',
-];
-
 export default function MasterPekerjaView({ currentRole }) {
   const { showLoading, showSuccess, showError, hideLoading } = useLoading();
   const [workers, setWorkers] = useState([]);
@@ -37,6 +23,8 @@ export default function MasterPekerjaView({ currentRole }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingWorker, setEditingWorker] = useState(null);
   const [availableProcesses, setAvailableProcesses] = useState([]);
+  const [staffPositions, setStaffPositions] = useState([]);
+  const [processCycleMap, setProcessCycleMap] = useState({});
 
   // Form State
   const [formData, setFormData] = useState({
@@ -62,6 +50,28 @@ export default function MasterPekerjaView({ currentRole }) {
         }
       })
       .catch(err => console.error('Gagal memuat opsi referensi:', err));
+
+    fetch('/api/settings/staff-positions')
+      .then(res => res.json())
+      .then(json => {
+        if (json.status === 'success' && json.data) {
+          setStaffPositions(json.data);
+        }
+      })
+      .catch(err => console.error('Gagal memuat jabatan staf:', err));
+
+    fetch('/api/settings/payroll-cycles')
+      .then(res => res.json())
+      .then(json => {
+        if (json.status === 'success' && json.data) {
+          const map = {};
+          json.data.forEach(item => {
+            map[item.process] = item.cycle_day;
+          });
+          setProcessCycleMap(map);
+        }
+      })
+      .catch(err => console.error('Gagal memuat mapping siklus payroll:', err));
   }, []);
 
   const fetchWorkers = async () => {
@@ -166,10 +176,10 @@ export default function MasterPekerjaView({ currentRole }) {
   };
 
   const handleDeleteWorker = async (id, name) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus/menonaktifkan pekerja ${name}?`)) return;
+    if (!confirm(`Nonaktifkan / Hapus pekerja "${name}"?\n\nTenang, riwayat setoran pekerjaan dan catatan gaji yang lalu TETAP AMAN tersimpan di pembukuan.`)) return;
 
     showLoading({
-      title: 'Menghapus Pekerja...',
+      title: 'Menonaktifkan Pekerja...',
       subtitle: 'Memeriksa relasi histori transaksi...',
       type: 'finance',
     });
@@ -183,16 +193,16 @@ export default function MasterPekerjaView({ currentRole }) {
 
       if (res.ok && json.status === 'success') {
         showSuccess({
-          title: 'Pekerja Dihapus!',
-          subtitle: 'Histori transaksi tetap terjaga aman.',
-          duration: 800,
+          title: 'Pekerja Dinonaktifkan!',
+          subtitle: `Pekerja ${name} berhasil diproses. Histori transaksi lama tetap aman tersimpan.`,
+          duration: 900,
           onComplete: () => {
             fetchWorkers();
           }
         });
       } else {
         hideLoading();
-        showError(json.message || 'Gagal menghapus pekerja.');
+        showError(json.message || 'Gagal memproses data pekerja.');
       }
     } catch (err) {
       hideLoading();
@@ -379,6 +389,11 @@ export default function MasterPekerjaView({ currentRole }) {
                       </td>
                       <td className="py-4 px-6 text-slate-800 font-medium">
                         <div>{worker.process}</div>
+                        {worker.type === 'Staff' && worker.staff_position && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold mt-1 bg-purple-50 text-purple-700 border border-purple-200">
+                            {worker.staff_position.department}
+                          </span>
+                        )}
                         {worker.type === 'Produksi' && worker.payment_system !== 'Bulanan' && (
                           <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold mt-1 border ${
                             worker.payroll_day === 'Kamis'
@@ -510,7 +525,18 @@ export default function MasterPekerjaView({ currentRole }) {
                   </label>
                   <select
                     value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    onChange={(e) => {
+                      const newType = e.target.value;
+                      const firstStaff = staffPositions[0];
+                      const staffProc = firstStaff ? (typeof firstStaff === 'object' ? firstStaff.name : firstStaff) : 'Staff';
+                      const prodProc = availableProcesses[0] || 'Jahit';
+                      setFormData({ 
+                        ...formData, 
+                        type: newType,
+                        process: newType === 'Staff' ? staffProc : prodProc,
+                        payment_system: newType === 'Staff' ? 'Bulanan' : formData.payment_system,
+                      });
+                    }}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600"
                   >
                     <option value="Produksi">Produksi</option>
@@ -527,23 +553,25 @@ export default function MasterPekerjaView({ currentRole }) {
                     value={formData.process}
                     onChange={(e) => {
                       const selectedProc = e.target.value;
-                      const isKamis = ['Potong', 'Jahit', 'Overdek', 'Kansay'].includes(selectedProc);
+                      const cycleDay = processCycleMap[selectedProc] || 'Kamis';
                       setFormData({ 
                         ...formData, 
                         process: selectedProc,
-                        payroll_day: formData.type === 'Produksi' ? (isKamis ? 'Kamis' : 'Sabtu') : formData.payroll_day,
+                        payroll_day: formData.type === 'Produksi' ? cycleDay : formData.payroll_day,
                       });
                     }}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600"
                   >
                     {formData.type === 'Staff' || formData.payment_system === 'Bulanan' ? (
                       <>
-                        {formData.process && !STAFF_POSITIONS.includes(formData.process) && (
+                        {formData.process && !staffPositions.some(p => (typeof p === 'object' ? p.name : p) === formData.process) && (
                           <option value={formData.process}>{formData.process}</option>
                         )}
-                        {STAFF_POSITIONS.map((pos, idx) => (
-                          <option key={idx} value={pos}>{pos}</option>
-                        ))}
+                        {staffPositions.map((pos, idx) => {
+                          const pName = typeof pos === 'object' ? pos.name : pos;
+                          const pDept = typeof pos === 'object' && pos.department ? ` (${pos.department})` : '';
+                          return <option key={idx} value={pName}>{pName}{pDept}</option>;
+                        })}
                       </>
                     ) : (
                       <>
@@ -571,7 +599,7 @@ export default function MasterPekerjaView({ currentRole }) {
                         ...formData, 
                         payment_system: newSys,
                         type: newSys === 'Bulanan' ? formData.type : 'Produksi',
-                        process: newSys === 'Bulanan' ? (STAFF_POSITIONS.includes(formData.process) ? formData.process : STAFF_POSITIONS[0]) : (availableProcesses[0] || 'Jahit'),
+                        process: newSys === 'Bulanan' ? (staffPositions.includes(formData.process) ? formData.process : (staffPositions[0] || 'Staff Operasional')) : (availableProcesses[0] || 'Jahit'),
                       });
                     }}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600"
