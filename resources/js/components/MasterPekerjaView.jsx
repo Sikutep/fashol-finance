@@ -44,6 +44,7 @@ export default function MasterPekerjaView({ currentRole }) {
     type: 'Produksi',
     process: '',
     payment_system: 'Borongan',
+    payroll_day: 'Kamis',
     default_salary: '',
     status: 'Aktif',
     notes: '',
@@ -93,6 +94,7 @@ export default function MasterPekerjaView({ currentRole }) {
       type: 'Produksi',
       process: availableProcesses[0] || 'Jahit',
       payment_system: 'Borongan',
+      payroll_day: 'Kamis',
       default_salary: '',
       status: 'Aktif',
       notes: '',
@@ -107,6 +109,7 @@ export default function MasterPekerjaView({ currentRole }) {
       type: worker.type,
       process: worker.process,
       payment_system: worker.payment_system,
+      payroll_day: worker.payroll_day || 'Kamis',
       default_salary: worker.default_salary > 0 ? worker.default_salary : '',
       status: worker.status,
       notes: worker.notes || '',
@@ -375,7 +378,16 @@ export default function MasterPekerjaView({ currentRole }) {
                         {worker.type}
                       </td>
                       <td className="py-4 px-6 text-slate-800 font-medium">
-                        {worker.process}
+                        <div>{worker.process}</div>
+                        {worker.type === 'Produksi' && worker.payment_system !== 'Bulanan' && (
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold mt-1 border ${
+                            worker.payroll_day === 'Kamis'
+                              ? 'bg-amber-50 text-amber-800 border-amber-200'
+                              : 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                          }`}>
+                            Gaji {worker.payroll_day || 'Kamis'}
+                          </span>
+                        )}
                       </td>
                       <td className="py-4 px-6 text-slate-600">
                         <div className="font-medium">{worker.payment_system}</div>
@@ -513,7 +525,15 @@ export default function MasterPekerjaView({ currentRole }) {
                   </label>
                   <select
                     value={formData.process}
-                    onChange={(e) => setFormData({ ...formData, process: e.target.value })}
+                    onChange={(e) => {
+                      const selectedProc = e.target.value;
+                      const isKamis = ['Potong', 'Jahit', 'Overdek', 'Kansay'].includes(selectedProc);
+                      setFormData({ 
+                        ...formData, 
+                        process: selectedProc,
+                        payroll_day: formData.type === 'Produksi' ? (isKamis ? 'Kamis' : 'Sabtu') : formData.payroll_day,
+                      });
+                    }}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600"
                   >
                     {formData.type === 'Staff' || formData.payment_system === 'Bulanan' ? (
@@ -579,6 +599,26 @@ export default function MasterPekerjaView({ currentRole }) {
                     />
                     <p className="text-[11px] text-slate-400 mt-1">
                       Otomatis menjadi nilai awal slip payroll bulanan tanpa tebakan heuristik.
+                    </p>
+                  </div>
+                )}
+
+                {/* Jadwal Payroll Mingguan (Khusus Produksi / Non-Bulanan) */}
+                {formData.payment_system !== 'Bulanan' && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Jadwal Payroll Mingguan
+                    </label>
+                    <select
+                      value={formData.payroll_day || 'Kamis'}
+                      onChange={(e) => setFormData({ ...formData, payroll_day: e.target.value })}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 focus:outline-none focus:border-emerald-600 font-medium"
+                    >
+                      <option value="Kamis">Hari Kamis (Cut-off Kamis s/d Rabu)</option>
+                      <option value="Sabtu">Hari Sabtu (Cut-off Sabtu s/d Jumat)</option>
+                    </select>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Otomatis tersinkron dengan Master Proses ({formData.process || 'Standar'}).
                     </p>
                   </div>
                 )}

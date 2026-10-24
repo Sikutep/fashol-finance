@@ -15,6 +15,7 @@ class ProductionProcess extends Model
         'description',
         'default_rate',
         'unit',
+        'payroll_day',
         'is_active',
     ];
 

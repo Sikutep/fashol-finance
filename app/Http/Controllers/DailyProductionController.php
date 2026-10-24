@@ -162,16 +162,28 @@ class DailyProductionController extends Controller
 
         // Scope Guard: Cegah pencatatan backdated ke periode payroll mingguan yang telah Disetujui atau Dibayar
         $prodDate = Carbon::parse($validated['production_date']);
-        $cycleStart = $prodDate->isThursday() ? $prodDate->copy()->startOfDay() : $prodDate->copy()->previous(Carbon::THURSDAY)->startOfDay();
-        $cycleEnd = $cycleStart->copy()->addDays(6)->endOfDay();
+        $processName = $validated['process_name'] ?? null;
 
-        $existingInPeriod = DailyProduction::whereBetween('production_date', [$cycleStart->format('Y-m-d'), $cycleEnd->format('Y-m-d')])->get();
-        $isPeriodLocked = $existingInPeriod->isNotEmpty() && $existingInPeriod->every(fn($r) => in_array($r->status, ['Disetujui', 'Dibayar', 'Masuk Payroll']));
+        $procRecord = \App\Models\ProductionProcess::where('process_name', $processName)->first();
+        $payrollDay = $procRecord->payroll_day ?? (in_array($processName, ['Potong', 'Jahit', 'Overdek', 'Kansay']) ? 'Kamis' : 'Sabtu');
+
+        if ($payrollDay === 'Sabtu') {
+            $cycleStart = ($prodDate->dayOfWeek === Carbon::SATURDAY) ? $prodDate->copy()->startOfDay() : $prodDate->copy()->previous(Carbon::SATURDAY)->startOfDay();
+            $cycleEnd = $cycleStart->copy()->addDays(6)->endOfDay();
+        } else {
+            $cycleStart = ($prodDate->dayOfWeek === Carbon::THURSDAY) ? $prodDate->copy()->startOfDay() : $prodDate->copy()->previous(Carbon::THURSDAY)->startOfDay();
+            $cycleEnd = $cycleStart->copy()->addDays(6)->endOfDay();
+        }
+
+        $existingInPeriod = DailyProduction::whereBetween('production_date', [$cycleStart->format('Y-m-d'), $cycleEnd->format('Y-m-d')])
+            ->where('process_name', $processName)
+            ->get();
+        $isPeriodLocked = $existingInPeriod->contains(fn($r) => in_array($r->status, ['Disetujui', 'Dibayar', 'Masuk Payroll']));
 
         if ($isPeriodLocked && !Auth::user()->isOwner()) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Periode payroll untuk tanggal ' . $prodDate->translatedFormat('d F Y') . ' telah disetujui atau dibayar. Transaksi baru tidak dapat dicatat.',
+                'message' => 'Periode payroll untuk proses ' . $processName . ' pada tanggal ' . $prodDate->translatedFormat('d F Y') . ' telah disetujui atau dibayar. Transaksi baru tidak dapat dicatat.',
             ], 422);
         }
 

@@ -240,4 +240,50 @@ class MasterProsesCatalogTest extends TestCase
                 'rate' => 850,
             ]);
     }
+
+    public function test_product_process_rates_supports_server_side_pagination_and_filtering(): void
+    {
+        // 1. Pagination per_page = 5
+        $paginatedRes = $this->actingAs($this->adminUser)->getJson('/api/master-proses?page=1&per_page=5');
+        $paginatedRes->assertStatus(200)
+            ->assertJsonStructure([
+                'status',
+                'data',
+                'pagination' => [
+                    'current_page',
+                    'last_page',
+                    'per_page',
+                    'total',
+                    'from',
+                    'to',
+                ],
+                'summary' => [
+                    'total_rates',
+                    'active_rates',
+                    'custom_rates_count',
+                    'avg_rate',
+                    'formatted_avg_rate',
+                ]
+            ]);
+
+        $pagination = $paginatedRes->json('pagination');
+        $this->assertEquals(1, $pagination['current_page']);
+        $this->assertEquals(5, $pagination['per_page']);
+        $this->assertLessThanOrEqual(5, count($paginatedRes->json('data')));
+
+        // 2. Filter Tipe Standar
+        $standarRes = $this->actingAs($this->adminUser)->getJson('/api/master-proses?type=Standar&per_page=20');
+        $standarRes->assertStatus(200);
+        foreach ($standarRes->json('data') as $rate) {
+            $this->assertFalse((bool) $rate['is_custom_rate']);
+        }
+
+        // 3. Sorting by rate desc
+        $sortRes = $this->actingAs($this->adminUser)->getJson('/api/master-proses?sort_by=rate&sort_dir=desc&per_page=20');
+        $sortRes->assertStatus(200);
+        $rates = array_column($sortRes->json('data'), 'rate');
+        $expected = $rates;
+        rsort($expected);
+        $this->assertEquals($expected, $rates);
+    }
 }

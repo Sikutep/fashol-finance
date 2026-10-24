@@ -37,6 +37,7 @@ export default function PrintSlipModal({
 
     if (isWeekly) {
       const details = slip.details || [];
+      const slipPaymentDate = slip.payment_date || (slip.payroll_day === 'Sabtu' && paymentDate ? paymentDate.replace('Kamis', 'Sabtu') : paymentDate) || (slip.payroll_day === 'Sabtu' ? 'Sabtu, Akhir Periode' : 'Kamis, Akhir Periode');
       return `
         <div class="slip-container ${!isLast ? 'page-break' : ''}">
           <!-- Header -->
@@ -55,10 +56,10 @@ export default function PrintSlipModal({
           <div style="display:grid; grid-template-columns:${isThermal ? '1fr' : '1fr 1fr'}; gap:4px; font-size:${isThermal ? '9px' : '10.5px'}; margin-bottom:8px; background:#f8fafc; padding:6px 8px; border-radius:4px; border:1px solid #e2e8f0;">
             <div>
               <div>Nama Pekerja: <strong>${slip.worker_name}</strong></div>
-              <div>No. Payroll: <span style="font-family:monospace; font-weight:bold;">${slip.payroll_number || '-'}</span></div>
+              <div>No. Payroll: <span style="font-family:monospace; font-weight:bold;">${slip.payroll_number || '-'}</span> <span style="font-size:0.85em; color:#047857;">(${slip.payroll_day || 'Kamis'})</span></div>
             </div>
             <div style="text-align:${isThermal ? 'left' : 'right'};">
-              <div>Tgl Pembayaran: <strong>${paymentDate || 'Kamis, Akhir Periode'}</strong></div>
+              <div>Tgl Pembayaran: <strong>${slipPaymentDate}</strong></div>
               <div>Status: <span style="font-weight:bold; color:#047857;">${slip.status || 'Disetujui'}</span></div>
             </div>
           </div>

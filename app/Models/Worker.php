@@ -18,6 +18,7 @@ class Worker extends Model
         'process',
         'payment_system',
         'default_salary',
+        'payroll_day',
         'status',
         'notes',
     ];

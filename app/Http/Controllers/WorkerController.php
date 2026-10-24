@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Worker;
 use App\Models\User;
+use App\Models\ProductionProcess;
 
 class WorkerController extends Controller
 {
@@ -126,6 +127,7 @@ class WorkerController extends Controller
             'process' => 'required|string|max:100',
             'payment_system' => 'required|in:Borongan,Harian,Bulanan',
             'default_salary' => 'nullable|numeric|min:0',
+            'payroll_day' => 'nullable|string|in:Kamis,Sabtu',
             'status' => 'required|in:Aktif,Nonaktif',
             'notes' => 'nullable|string',
         ]);
@@ -139,6 +141,12 @@ class WorkerController extends Controller
             $workerCode = 'PKR-' . str_pad($nextId, 3, '0', STR_PAD_LEFT);
         }
 
+        $procRecord = ProductionProcess::where('process_name', $validated['process'])->first();
+        $defaultDay = $procRecord?->payroll_day ?? (in_array($validated['process'], ['Potong', 'Jahit', 'Overdek', 'Kansay']) ? 'Kamis' : 'Sabtu');
+
+        // Jika pekerja bertipe Produksi, single source of truth jadwal payroll adalah Master Proses
+        $payrollDay = $validated['type'] === 'Produksi' ? ($procRecord?->payroll_day ?? $defaultDay) : ($validated['payroll_day'] ?? null);
+
         $worker = Worker::create([
             'user_id' => $validated['user_id'] ?? null,
             'worker_code' => $workerCode,
@@ -147,6 +155,7 @@ class WorkerController extends Controller
             'process' => $validated['process'],
             'payment_system' => $validated['payment_system'],
             'default_salary' => $validated['default_salary'] ?? 0,
+            'payroll_day' => $payrollDay,
             'status' => $validated['status'],
             'notes' => $validated['notes'] ?? null,
         ]);
@@ -169,9 +178,19 @@ class WorkerController extends Controller
             'process' => 'sometimes|required|string|max:100',
             'payment_system' => 'sometimes|required|in:Borongan,Harian,Bulanan',
             'default_salary' => 'nullable|numeric|min:0',
+            'payroll_day' => 'nullable|string|in:Kamis,Sabtu',
             'status' => 'sometimes|required|in:Aktif,Nonaktif',
             'notes' => 'nullable|string',
         ]);
+
+        // Auto-align payroll_day jika process diubah untuk pekerja Produksi
+        $targetProcess = $validated['process'] ?? $worker->process;
+        $targetType = $validated['type'] ?? $worker->type;
+        if ($targetType === 'Produksi' && $targetProcess) {
+            $procRecord = ProductionProcess::where('process_name', $targetProcess)->first();
+            $standardDay = $procRecord?->payroll_day ?? (in_array($targetProcess, ['Potong', 'Jahit', 'Overdek', 'Kansay']) ? 'Kamis' : 'Sabtu');
+            $validated['payroll_day'] = $validated['payroll_day'] ?? $standardDay;
+        }
 
         $worker->update($validated);
 

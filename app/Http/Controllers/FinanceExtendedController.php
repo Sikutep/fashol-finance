@@ -67,22 +67,54 @@ class FinanceExtendedController extends Controller
         return [null, null];
     }
 
-    // 1. Payroll Mingguan (Kamis s/d Rabu)
+    // 1. Payroll Mingguan (Kamis & Sabtu Dual-Cycle)
     public function getWeeklyPayroll(Request $request)
     {
         $now = Carbon::now();
+        $cycle = strtolower($request->input('cycle', 'all'));
+        if (!in_array($cycle, ['kamis', 'sabtu', 'all'])) {
+            $cycle = 'all';
+        }
 
-        // Calculate dynamic current weekly cycle (Thursday to Wednesday)
-        $dayOfWeek = $now->dayOfWeek; // 0 = Sun, 4 = Thu
-        if ($dayOfWeek >= Carbon::THURSDAY) {
-            $currStart = $now->copy()->previous(Carbon::THURSDAY);
-            if ($dayOfWeek === Carbon::THURSDAY) {
+        // Resolusi daftar nama proses per siklus
+        $kamisProcesses = \App\Models\ProductionProcess::where('payroll_day', 'Kamis')->pluck('process_name')->toArray();
+        if (empty($kamisProcesses)) {
+            $kamisProcesses = ['Potong', 'Jahit', 'Overdek', 'Kansay'];
+        }
+        $sabtuProcesses = \App\Models\ProductionProcess::where('payroll_day', 'Sabtu')->pluck('process_name')->toArray();
+        if (empty($sabtuProcesses)) {
+            $sabtuProcesses = ['QC', 'QC Borongan', 'Rambuan', 'Lipat Celana', 'OPP', 'Benang', 'Bordir'];
+        }
+
+        $targetProcesses = match($cycle) {
+            'kamis' => $kamisProcesses,
+            'sabtu' => $sabtuProcesses,
+            default => null,
+        };
+
+        // Hitung siklus mingguan dinamis
+        $dayOfWeek = $now->dayOfWeek; // 0 = Sun, 4 = Thu, 6 = Sat
+
+        if ($cycle === 'sabtu') {
+            // Siklus Sabtu (Sabtu s/d Jumat)
+            if ($dayOfWeek === Carbon::SATURDAY) {
                 $currStart = $now->copy()->startOfDay();
+            } else {
+                $currStart = $now->copy()->previous(Carbon::SATURDAY)->startOfDay();
             }
             $currEnd = $currStart->copy()->addDays(6)->endOfDay();
         } else {
-            $currStart = $now->copy()->subWeek()->next(Carbon::THURSDAY)->startOfDay();
-            $currEnd = $currStart->copy()->addDays(6)->endOfDay();
+            // Siklus Kamis (Kamis s/d Rabu) atau All
+            if ($dayOfWeek >= Carbon::THURSDAY) {
+                $currStart = $now->copy()->previous(Carbon::THURSDAY);
+                if ($dayOfWeek === Carbon::THURSDAY) {
+                    $currStart = $now->copy()->startOfDay();
+                }
+                $currEnd = $currStart->copy()->addDays(6)->endOfDay();
+            } else {
+                $currStart = $now->copy()->subWeek()->next(Carbon::THURSDAY)->startOfDay();
+                $currEnd = $currStart->copy()->addDays(6)->endOfDay();
+            }
         }
 
         $monthNames = [
@@ -118,10 +150,13 @@ class FinanceExtendedController extends Controller
         $daysIndo = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
         $paymentDate = $daysIndo[$payCarbon->dayOfWeek] . ', ' . $payCarbon->day . ' ' . ($monthNames[$payCarbon->month] ?? $payCarbon->format('F')) . ' ' . $payCarbon->year;
 
-        // Query daily productions strictly within the period
+        // Query daily productions strictly within the period and matching cycle
         $query = DailyProduction::with('worker');
         if ($startDate && $endDate) {
             $query->whereBetween('production_date', [$startDate, $endDate]);
+        }
+        if (!empty($targetProcesses)) {
+            $query->whereIn('process_name', $targetProcesses);
         }
 
         $grouped = $query->selectRaw('worker_id, SUM(total_qty) as total_qty, SUM(total_wage) as total_wage, COUNT(id) as total_trx, MAX(status) as max_status, MIN(status) as min_status')
@@ -132,7 +167,7 @@ class FinanceExtendedController extends Controller
         $items = [];
         $idx = 1;
 
-        // Determine weekly status based on underlying records
+        // Determine weekly status based on underlying records for this specific cycle
         $determinedStatus = 'Draft';
         if ($grouped->isNotEmpty()) {
             $allPaid = true;
@@ -168,11 +203,16 @@ class FinanceExtendedController extends Controller
         foreach ($grouped as $g) {
             $totalPayroll += (float) $g->total_wage;
 
-            // Detail transaksi harian pekerja dalam periode ini (Sesuai SPK Modul 4)
-            $workerProductions = DailyProduction::with('items')
+            // Detail transaksi harian pekerja dalam periode dan siklus ini (Sesuai SPK Modul 4)
+            $workerProdQuery = DailyProduction::with('items')
                 ->where('worker_id', $g->worker_id)
-                ->whereBetween('production_date', [$startDate, $endDate])
-                ->orderBy('production_date', 'asc')
+                ->whereBetween('production_date', [$startDate, $endDate]);
+
+            if (!empty($targetProcesses)) {
+                $workerProdQuery->whereIn('process_name', $targetProcesses);
+            }
+
+            $workerProductions = $workerProdQuery->orderBy('production_date', 'asc')
                 ->get()
                 ->flatMap(function ($prod) {
                     return $prod->items->map(function ($item) use ($prod) {
@@ -209,11 +249,24 @@ class FinanceExtendedController extends Controller
                 $workerStatus = 'Draft';
             }
 
+            $workerCycle = null;
+            if ($cycle === 'kamis') {
+                $workerCycle = 'Kamis';
+            } elseif ($cycle === 'sabtu') {
+                $workerCycle = 'Sabtu';
+            } else {
+                // Pada tab 'all', siklus ditentukan oleh Master Proses dari transaksi riil yang dikerjakan
+                $firstProc = $workerProductions->first()['process_name'] ?? ($g->worker?->process ?? null);
+                $procRecord = \App\Models\ProductionProcess::where('process_name', $firstProc)->first();
+                $workerCycle = $procRecord?->payroll_day ?? (in_array($firstProc, $kamisProcesses) ? 'Kamis' : 'Sabtu');
+            }
+
             $items[] = [
                 'id' => $g->worker_id,
                 'worker_id' => $g->worker_id,
                 'payroll_number' => 'PYW-' . Carbon::parse($endDate)->format('ym') . '-' . str_pad($idx++, 2, '0', STR_PAD_LEFT),
                 'worker_name' => $g->worker ? $g->worker->name : 'Pekerja #' . $g->worker_id,
+                'payroll_day' => $workerCycle,
                 'period' => $periodLabel,
                 'total_qty' => (int) $g->total_qty,
                 'formatted_qty' => (int) $g->total_qty . ' pcs',
@@ -224,7 +277,7 @@ class FinanceExtendedController extends Controller
             ];
         }
 
-        // Available periods for dropdown selection (Kamis - Rabu dinamis)
+        // Available periods for dropdown selection
         $availablePeriods = [$defaultPeriodLabel];
         $scanStart = $currStart->copy();
         for ($w = 1; $w <= 8; $w++) {
@@ -250,8 +303,16 @@ class FinanceExtendedController extends Controller
             'Dibayar' => 'Telah dibayarkan kepada Pekerja',
         ];
 
+        $cycleLabelMap = [
+            'kamis' => 'Kelompok Kamis (Potong, Jahit, Overdek, Kansay)',
+            'sabtu' => 'Kelompok Sabtu (QC, Lipat, OPP, Rambuan, dll)',
+            'all' => 'Semua Siklus (Kamis & Sabtu)',
+        ];
+
         return response()->json([
             'status' => 'success',
+            'cycle' => $cycle,
+            'cycle_label' => $cycleLabelMap[$cycle] ?? 'Kelompok Kamis',
             'payroll_status' => $determinedStatus,
             'period' => $periodLabel,
             'start_date' => $startDate,
@@ -269,12 +330,14 @@ class FinanceExtendedController extends Controller
     {
         $validated = $request->validate([
             'status' => 'required|in:Draft,Diperiksa,Disetujui,Dibayar',
+            'cycle' => 'nullable|string|in:kamis,sabtu,all',
             'period' => 'nullable|string',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
         ]);
 
         $status = $validated['status'];
+        $cycle = strtolower($validated['cycle'] ?? 'all');
 
         // Scope Guard & RBAC: Only Owner can approve or pay payroll
         if (in_array($status, ['Disetujui', 'Dibayar']) && !Auth::user()->isOwner()) {
@@ -307,8 +370,29 @@ class FinanceExtendedController extends Controller
             ]);
         }
 
+        $kamisProcesses = \App\Models\ProductionProcess::where('payroll_day', 'Kamis')->pluck('process_name')->toArray();
+        if (empty($kamisProcesses)) {
+            $kamisProcesses = ['Potong', 'Jahit', 'Overdek', 'Kansay'];
+        }
+        $sabtuProcesses = \App\Models\ProductionProcess::where('payroll_day', 'Sabtu')->pluck('process_name')->toArray();
+        if (empty($sabtuProcesses)) {
+            $sabtuProcesses = ['QC', 'QC Borongan', 'Rambuan', 'Lipat Celana', 'OPP', 'Benang', 'Bordir'];
+        }
+
+        $targetProcesses = match($cycle) {
+            'kamis' => $kamisProcesses,
+            'sabtu' => $sabtuProcesses,
+            default => null,
+        };
+
+        // Query builder restricted to target processes (if cycle is specified)
+        $recordsQuery = DailyProduction::whereBetween('production_date', [$startDate, $endDate]);
+        if (!empty($targetProcesses)) {
+            $recordsQuery->whereIn('process_name', $targetProcesses);
+        }
+
         // Scope Guard & RBAC: Cegah demosi status jika sudah Disetujui atau Dibayar tanpa otorisasi Owner
-        $existingRecords = DailyProduction::whereBetween('production_date', [$startDate, $endDate])->get();
+        $existingRecords = (clone $recordsQuery)->get();
         if ($existingRecords->isNotEmpty()) {
             $isCurrentlyLocked = $existingRecords->every(fn($r) => in_array($r->status, ['Disetujui', 'Dibayar', 'Masuk Payroll']));
             if ($isCurrentlyLocked && in_array($status, ['Draft', 'Diperiksa']) && !Auth::user()->isOwner()) {
@@ -320,25 +404,26 @@ class FinanceExtendedController extends Controller
         }
 
         if ($dailyStatus === 'Diperiksa') {
-            DailyProduction::whereBetween('production_date', [$startDate, $endDate])
-                ->whereIn('status', ['Draft', 'Tercatat'])
-                ->update(['status' => 'Diperiksa']);
+            (clone $recordsQuery)->whereIn('status', ['Draft', 'Tercatat'])->update(['status' => 'Diperiksa']);
         } elseif ($dailyStatus === 'Disetujui') {
-            DailyProduction::whereBetween('production_date', [$startDate, $endDate])
-                ->whereIn('status', ['Draft', 'Tercatat', 'Diperiksa'])
-                ->update(['status' => 'Disetujui']);
+            (clone $recordsQuery)->whereIn('status', ['Draft', 'Tercatat', 'Diperiksa'])->update(['status' => 'Disetujui']);
         } elseif ($dailyStatus === 'Dibayar') {
-            DailyProduction::whereBetween('production_date', [$startDate, $endDate])
-                ->update(['status' => 'Dibayar']);
+            (clone $recordsQuery)->update(['status' => 'Dibayar']);
         } else {
-            DailyProduction::whereBetween('production_date', [$startDate, $endDate])
-                ->update(['status' => $dailyStatus]);
+            (clone $recordsQuery)->update(['status' => $dailyStatus]);
         }
+
+        $cycleLabel = match($cycle) {
+            'kamis' => 'Kelompok Kamis',
+            'sabtu' => 'Kelompok Sabtu',
+            default => 'Semua Kelompok',
+        };
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Status payroll mingguan berhasil diperbarui menjadi ' . $status,
+            'message' => 'Status payroll mingguan (' . $cycleLabel . ') berhasil diperbarui menjadi ' . $status,
             'new_status' => $status,
+            'cycle' => $cycle,
         ]);
     }
 
@@ -1559,10 +1644,17 @@ class FinanceExtendedController extends Controller
     {
         $res = $this->getWeeklyPayroll($request)->getData(true);
         $period = $res['period'] ?? 'Weekly';
-        $filename = "rekap_payroll_mingguan_" . preg_replace('/[^A-Za-z0-9_-]/', '_', $period) . ".csv";
+        $cycle = $res['cycle'] ?? $request->input('cycle', 'all');
+        $cycleLabel = match(strtolower($cycle)) {
+            'kamis' => 'Kelompok Kamis (Jahit, Potong, Overdek, Kansay)',
+            'sabtu' => 'Kelompok Sabtu (Finishing, QC, Packing)',
+            default => 'Semua Kelompok',
+        };
+        $filename = "rekap_payroll_mingguan_" . $cycle . "_" . preg_replace('/[^A-Za-z0-9_-]/', '_', $period) . ".csv";
 
         $csv = "\xEF\xBB\xBF";
         $csv .= "REKAP PAYROLL MINGGUAN - CV FASHOL MITSLI SEE\n";
+        $csv .= "Kelompok:," . '"' . $cycleLabel . '"' . "\n";
         $csv .= "Periode:," . '"' . $period . '"' . "\n";
         $csv .= "Tanggal Bayar:," . '"' . ($res['payment_date'] ?? '-') . '"' . "\n\n";
         $csv .= "No,No Payroll,Nama Pekerja,Total Output (pcs),Total Upah (Rp),Status\n";

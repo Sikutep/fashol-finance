@@ -66,6 +66,7 @@ export default function MasterProsesView({ currentRole }) {
     description: '',
     default_rate: '',
     unit: 'pcs',
+    payroll_day: 'Kamis',
     is_active: true,
   });
 
@@ -86,6 +87,17 @@ export default function MasterProsesView({ currentRole }) {
   const [ratesGroupFilter, setRatesGroupFilter] = useState('Semua');
   const [ratesStatusFilter, setRatesStatusFilter] = useState('Semua');
   const [ratesTypeFilter, setRatesTypeFilter] = useState('Semua'); // 'Semua' | 'Standar' | 'Khusus'
+  const [ratesSort, setRatesSort] = useState('product_name_asc');
+  const [ratesPage, setRatesPage] = useState(1);
+  const [ratesPerPage, setRatesPerPage] = useState(10);
+  const [ratesPagination, setRatesPagination] = useState({
+    current_page: 1,
+    last_page: 1,
+    per_page: 10,
+    total: 0,
+    from: 0,
+    to: 0,
+  });
 
   // Modal State Tab 2
   const [isRatesModalOpen, setIsRatesModalOpen] = useState(false);
@@ -142,16 +154,28 @@ export default function MasterProsesView({ currentRole }) {
   const fetchRates = async () => {
     try {
       setRatesLoading(true);
+      const sortParts = ratesSort.split('_');
+      const sortDir = sortParts.pop() || 'asc';
+      const sortBy = sortParts.join('_') || 'product_name';
+
       const params = new URLSearchParams({
+        page: ratesPage.toString(),
+        per_page: ratesPerPage.toString(),
         search: ratesSearch,
         product_group_id: ratesGroupFilter,
+        type: ratesTypeFilter,
         status: ratesStatusFilter,
+        sort_by: sortBy,
+        sort_dir: sortDir,
       });
 
       const res = await fetch(`/api/master-proses?${params.toString()}`);
       const json = await res.json();
       if (json.status === 'success') {
         setRatesList(json.data || []);
+        if (json.pagination) {
+          setRatesPagination(json.pagination);
+        }
         setProductGroups(json.product_groups || []);
         setStandardProcesses(json.standard_processes || []);
         if (json.summary) {
@@ -172,7 +196,11 @@ export default function MasterProsesView({ currentRole }) {
     } else {
       fetchRates();
     }
-  }, [activeSubTab, catalogPage, catalogPerPage, catalogSort, catalogStatus, ratesGroupFilter, ratesStatusFilter]);
+  }, [
+    activeSubTab, 
+    catalogPage, catalogPerPage, catalogSort, catalogStatus, 
+    ratesPage, ratesPerPage, ratesSort, ratesGroupFilter, ratesTypeFilter, ratesStatusFilter
+  ]);
 
   // Handle Search Tab 1
   const handleCatalogSearchSubmit = (e) => {
@@ -184,15 +212,12 @@ export default function MasterProsesView({ currentRole }) {
   // Handle Search Tab 2
   const handleRatesSearchSubmit = (e) => {
     e.preventDefault();
+    setRatesPage(1);
     fetchRates();
   };
 
-  // Filtered rates list based on type filter ('Standar' vs 'Khusus')
-  const displayedRates = ratesList.filter(item => {
-    if (ratesTypeFilter === 'Standar') return !item.is_custom_rate;
-    if (ratesTypeFilter === 'Khusus') return !!item.is_custom_rate;
-    return true;
-  });
+  // Server-side filtered and paginated rates list
+  const displayedRates = ratesList;
 
   // ==========================================
   // TAB 1 (KATALOG) MODAL & CRUD ACTIONS
@@ -206,6 +231,7 @@ export default function MasterProsesView({ currentRole }) {
       description: '',
       default_rate: '',
       unit: 'pcs',
+      payroll_day: 'Kamis',
       is_active: true,
     });
     setIsCatalogModalOpen(true);
@@ -219,6 +245,7 @@ export default function MasterProsesView({ currentRole }) {
       description: item.description || '',
       default_rate: item.default_rate,
       unit: item.unit || 'pcs',
+      payroll_day: item.payroll_day || 'Kamis',
       is_active: item.is_active ? true : false,
     });
     setIsCatalogModalOpen(true);
@@ -719,6 +746,7 @@ export default function MasterProsesView({ currentRole }) {
                     <th className="py-4 px-6">Deskripsi / Keterangan</th>
                     <th className="py-4 px-6">Tarif Upah Bawaan</th>
                     <th className="py-4 px-6">Satuan</th>
+                    <th className="py-4 px-6">Jadwal Payroll</th>
                     <th className="py-4 px-6">Status</th>
                     <th className="py-4 px-6 text-right">Aksi</th>
                   </tr>
@@ -726,13 +754,13 @@ export default function MasterProsesView({ currentRole }) {
                 <tbody className="divide-y divide-slate-100">
                   {catalogLoading ? (
                     <tr>
-                      <td colSpan="7" className="py-12 text-center text-slate-400">
+                      <td colSpan="8" className="py-12 text-center text-slate-400">
                         Memuat katalog master proses...
                       </td>
                     </tr>
                   ) : catalogList.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="py-12 text-center text-slate-400">
+                      <td colSpan="8" className="py-12 text-center text-slate-400">
                         Tidak ada proses ditemukan di katalog. Silakan tambahkan proses baru.
                       </td>
                     </tr>
@@ -762,6 +790,15 @@ export default function MasterProsesView({ currentRole }) {
                         </td>
                         <td className="py-4 px-6 text-slate-600 font-medium">
                           per {item.unit || 'pcs'}
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold border ${
+                            item.payroll_day === 'Kamis'
+                              ? 'bg-amber-50 text-amber-800 border-amber-200'
+                              : 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                          }`}>
+                            {item.payroll_day === 'Kamis' ? 'Kamis (Cut-off Rab)' : 'Sabtu (Cut-off Jum)'}
+                          </span>
                         </td>
                         <td className="py-4 px-6">
                           <button
@@ -912,7 +949,10 @@ export default function MasterProsesView({ currentRole }) {
                   <span className="text-slate-500 font-medium">Model:</span>
                   <select
                     value={ratesGroupFilter}
-                    onChange={(e) => setRatesGroupFilter(e.target.value)}
+                    onChange={(e) => {
+                      setRatesGroupFilter(e.target.value);
+                      setRatesPage(1);
+                    }}
                     className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm font-medium focus:outline-none focus:border-emerald-600 shadow-2xs"
                   >
                     <option value="Semua">Semua Model</option>
@@ -927,7 +967,10 @@ export default function MasterProsesView({ currentRole }) {
                   <span className="text-slate-500 font-medium">Tipe:</span>
                   <select
                     value={ratesTypeFilter}
-                    onChange={(e) => setRatesTypeFilter(e.target.value)}
+                    onChange={(e) => {
+                      setRatesTypeFilter(e.target.value);
+                      setRatesPage(1);
+                    }}
                     className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm font-medium focus:outline-none focus:border-emerald-600 shadow-2xs"
                   >
                     <option value="Semua">Semua Tipe</option>
@@ -941,12 +984,34 @@ export default function MasterProsesView({ currentRole }) {
                   <span className="text-slate-500 font-medium">Status:</span>
                   <select
                     value={ratesStatusFilter}
-                    onChange={(e) => setRatesStatusFilter(e.target.value)}
+                    onChange={(e) => {
+                      setRatesStatusFilter(e.target.value);
+                      setRatesPage(1);
+                    }}
                     className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm font-medium focus:outline-none focus:border-emerald-600 shadow-2xs"
                   >
                     <option value="Semua">Semua</option>
                     <option value="Aktif">Aktif</option>
                     <option value="Nonaktif">Nonaktif</option>
+                  </select>
+                </div>
+
+                {/* Filter Urutan */}
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-slate-500 font-medium">Urut:</span>
+                  <select
+                    value={ratesSort}
+                    onChange={(e) => {
+                      setRatesSort(e.target.value);
+                      setRatesPage(1);
+                    }}
+                    className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm font-medium focus:outline-none focus:border-emerald-600 shadow-2xs"
+                  >
+                    <option value="product_name_asc">Model Produk (A - Z)</option>
+                    <option value="product_name_desc">Model Produk (Z - A)</option>
+                    <option value="process_name_asc">Nama Proses (A - Z)</option>
+                    <option value="rate_asc">Tarif Terendah</option>
+                    <option value="rate_desc">Tarif Tertinggi</option>
                   </select>
                 </div>
               </div>
@@ -1065,6 +1130,53 @@ export default function MasterProsesView({ currentRole }) {
               </table>
             </div>
 
+            {/* Pagination Controls Tab 2 */}
+            <div className="p-4 bg-slate-50/70 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+              <div className="flex items-center gap-3">
+                <div>
+                  Menampilkan <strong>{ratesPagination.from || 0}</strong> - <strong>{ratesPagination.to || 0}</strong> dari total <strong>{ratesPagination.total || 0}</strong> tarif pekerjaan
+                </div>
+                <div className="hidden sm:flex items-center gap-1.5 pl-3 border-l border-slate-200">
+                  <span>Tampilkan:</span>
+                  <select
+                    value={ratesPerPage}
+                    onChange={(e) => {
+                      setRatesPerPage(Number(e.target.value));
+                      setRatesPage(1);
+                    }}
+                    className="px-2 py-1 rounded-md border border-slate-200 bg-white font-medium text-slate-700 text-xs focus:outline-none focus:border-emerald-600 shadow-2xs"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={ratesPage <= 1}
+                  onClick={() => setRatesPage((prev) => Math.max(1, prev - 1))}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-medium text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 flex items-center gap-1 shadow-2xs transition-colors"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Sebelumnya</span>
+                </button>
+                <span className="font-semibold px-2 text-slate-700">
+                  Halaman {ratesPagination.current_page || 1} / {ratesPagination.last_page || 1}
+                </span>
+                <button
+                  disabled={ratesPage >= (ratesPagination.last_page || 1)}
+                  onClick={() => setRatesPage((prev) => Math.min(ratesPagination.last_page, prev + 1))}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-medium text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 flex items-center gap-1 shadow-2xs transition-colors"
+                >
+                  <span>Selanjutnya</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
             {/* Business Rule Callout Tab 2 */}
             <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-start gap-3 text-xs text-slate-500">
               <Info className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
@@ -1179,6 +1291,51 @@ export default function MasterProsesView({ currentRole }) {
                     <option value="kodi">kodi (20 pcs)</option>
                     <option value="meter">meter</option>
                   </select>
+                </div>
+              </div>
+
+              {/* Jadwal Payroll Mingguan */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Jadwal Payroll Mingguan <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                    catalogFormData.payroll_day === 'Kamis' 
+                      ? 'border-amber-500 bg-amber-50/50 text-amber-900' 
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="catalog_payroll_day"
+                      value="Kamis"
+                      checked={catalogFormData.payroll_day === 'Kamis'}
+                      onChange={(e) => setCatalogFormData({ ...catalogFormData, payroll_day: e.target.value })}
+                      className="mt-0.5 text-amber-600 focus:ring-amber-500"
+                    />
+                    <div>
+                      <div className="font-bold text-xs">Hari Kamis</div>
+                      <div className="text-2xs text-slate-500">Cut-off Kamis - Rabu (Jahit, Potong, dll)</div>
+                    </div>
+                  </label>
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                    catalogFormData.payroll_day === 'Sabtu' 
+                      ? 'border-indigo-500 bg-indigo-50/50 text-indigo-900' 
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="catalog_payroll_day"
+                      value="Sabtu"
+                      checked={catalogFormData.payroll_day === 'Sabtu'}
+                      onChange={(e) => setCatalogFormData({ ...catalogFormData, payroll_day: e.target.value })}
+                      className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div>
+                      <div className="font-bold text-xs">Hari Sabtu</div>
+                      <div className="text-2xs text-slate-500">Cut-off Sabtu - Jumat (QC, Lipat, dll)</div>
+                    </div>
+                  </label>
                 </div>
               </div>
 

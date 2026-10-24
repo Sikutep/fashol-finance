@@ -36,6 +36,7 @@ class ReferenceController extends Controller
                     'description' => $s['desc'],
                     'default_rate' => $s['rate'],
                     'unit' => $s['unit'],
+                    'payroll_day' => in_array($s['name'], ['Potong', 'Jahit', 'Overdek', 'Kansay']) ? 'Kamis' : 'Sabtu',
                     'is_active' => true,
                 ]);
             }
@@ -267,6 +268,7 @@ class ReferenceController extends Controller
             'description' => 'nullable|string',
             'default_rate' => 'required|numeric|min:0|max:50000',
             'unit' => 'nullable|string|max:50',
+            'payroll_day' => 'nullable|string|in:Kamis,Sabtu',
             'is_active' => 'nullable|boolean',
         ]);
 
@@ -281,12 +283,15 @@ class ReferenceController extends Controller
             }
         }
 
+        $defaultDay = in_array($validated['process_name'], ['Potong', 'Jahit', 'Overdek', 'Kansay']) ? 'Kamis' : 'Sabtu';
+
         $process = ProductionProcess::create([
             'process_code' => $code,
             'process_name' => $validated['process_name'],
             'description' => $validated['description'] ?? null,
             'default_rate' => $validated['default_rate'],
             'unit' => $validated['unit'] ?? 'pcs',
+            'payroll_day' => $validated['payroll_day'] ?? $defaultDay,
             'is_active' => $validated['is_active'] ?? true,
         ]);
 
@@ -307,6 +312,7 @@ class ReferenceController extends Controller
             'description' => 'nullable|string',
             'default_rate' => 'sometimes|required|numeric|min:0|max:50000',
             'unit' => 'nullable|string|max:50',
+            'payroll_day' => 'nullable|string|in:Kamis,Sabtu',
             'is_active' => 'nullable|boolean',
         ]);
 
@@ -372,24 +378,85 @@ class ReferenceController extends Controller
             $query->where('is_active', $request->status === 'Aktif');
         }
 
-        $rates = $query->orderBy('product_name', 'asc')
-            ->orderBy('process_name', 'asc')
-            ->get();
+        if ($request->filled('type') && $request->type !== 'Semua') {
+            if ($request->type === 'Khusus') {
+                $query->where('is_custom_rate', true);
+            } elseif ($request->type === 'Standar') {
+                $query->where('is_custom_rate', false);
+            }
+        }
 
+        // Sorting
+        $sortBy = $request->input('sort_by', 'product_name');
+        $sortDir = strtolower($request->input('sort_dir', 'asc')) === 'desc' ? 'desc' : 'asc';
+        $allowedSorts = ['product_name', 'process_name', 'rate', 'unit', 'is_custom_rate', 'is_active', 'created_at'];
+
+        if (in_array($sortBy, $allowedSorts)) {
+            $query->orderBy($sortBy, $sortDir);
+            if ($sortBy === 'product_name') {
+                $query->orderBy('process_name', 'asc');
+            }
+        } else {
+            $query->orderBy('product_name', 'asc')->orderBy('process_name', 'asc');
+        }
+
+        // Pagination capped safely
+        $perPageInput = $request->input('per_page', 10);
         $groups = ProductGroup::select('id', 'name')->get();
         $standardProcesses = ProductionProcess::where('is_active', true)->orderBy('id', 'asc')->get();
 
+        $totalRates = ProductProcessRate::count();
+        $activeRatesCount = ProductProcessRate::where('is_active', true)->count();
+        $customRatesCount = ProductProcessRate::where('is_custom_rate', true)->count();
+        $avgRate = round(ProductProcessRate::where('is_active', true)->avg('rate') ?? 0);
+
+        if ($perPageInput === 'all' || $perPageInput === '-1') {
+            $rates = $query->get();
+            return response()->json([
+                'status' => 'success',
+                'data' => $rates,
+                'pagination' => [
+                    'current_page' => 1,
+                    'last_page' => 1,
+                    'per_page' => $rates->count(),
+                    'total' => $rates->count(),
+                    'from' => $rates->count() > 0 ? 1 : 0,
+                    'to' => $rates->count(),
+                ],
+                'product_groups' => $groups,
+                'standard_processes' => $standardProcesses,
+                'summary' => [
+                    'total_rates' => $totalRates,
+                    'active_rates' => $activeRatesCount,
+                    'custom_rates_count' => $customRatesCount,
+                    'avg_rate' => $avgRate,
+                    'formatted_avg_rate' => 'Rp ' . number_format($avgRate, 0, ',', '.'),
+                ]
+            ]);
+        }
+
+        $perPage = min(100, max(5, (int) $perPageInput));
+        $paginated = $query->paginate($perPage);
+
         return response()->json([
             'status' => 'success',
-            'data' => $rates,
+            'data' => $paginated->items(),
+            'pagination' => [
+                'current_page' => $paginated->currentPage(),
+                'last_page' => $paginated->lastPage(),
+                'per_page' => $paginated->perPage(),
+                'total' => $paginated->total(),
+                'from' => $paginated->firstItem() ?? 0,
+                'to' => $paginated->lastItem() ?? 0,
+            ],
             'product_groups' => $groups,
             'standard_processes' => $standardProcesses,
             'summary' => [
-                'total_rates' => $rates->count(),
-                'active_rates' => $rates->where('is_active', true)->count(),
-                'custom_rates_count' => $rates->where('is_custom_rate', true)->count(),
-                'avg_rate' => round($rates->avg('rate') ?? 0),
-                'formatted_avg_rate' => 'Rp ' . number_format($rates->avg('rate') ?? 0, 0, ',', '.'),
+                'total_rates' => $totalRates,
+                'active_rates' => $activeRatesCount,
+                'custom_rates_count' => $customRatesCount,
+                'avg_rate' => $avgRate,
+                'formatted_avg_rate' => 'Rp ' . number_format($avgRate, 0, ',', '.'),
             ]
         ]);
     }

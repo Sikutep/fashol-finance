@@ -26,6 +26,7 @@ import { exportToExcel, formatRupiah } from '../utils/exportUtils';
 
 export default function PayrollMingguanView({ currentRole }) {
   const { showLoading, showSuccess, showError, hideLoading } = useLoading();
+  const [activeCycle, setActiveCycle] = useState('kamis');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -39,11 +40,13 @@ export default function PayrollMingguanView({ currentRole }) {
   const [slipPrintList, setSlipPrintList] = useState([]);
   const [isReportPrintOpen, setIsReportPrintOpen] = useState(false);
 
-  const fetchPayroll = async (periodToFetch = selectedPeriod) => {
+  const fetchPayroll = async (periodToFetch = selectedPeriod, cycleToFetch = activeCycle) => {
     try {
       setLoading(true);
-      const queryParam = periodToFetch ? `?period=${encodeURIComponent(periodToFetch)}` : '';
-      const res = await fetch(`/api/payroll-mingguan${queryParam}`);
+      const params = new URLSearchParams();
+      if (periodToFetch) params.append('period', periodToFetch);
+      if (cycleToFetch) params.append('cycle', cycleToFetch);
+      const res = await fetch(`/api/payroll-mingguan?${params.toString()}`);
       const json = await res.json();
       if (json.status === 'success') {
         setData(json);
@@ -64,10 +67,17 @@ export default function PayrollMingguanView({ currentRole }) {
     fetchPayroll();
   }, []);
 
+  const handleCycleChange = (newCycle) => {
+    setActiveCycle(newCycle);
+    setSelectedPeriod('');
+    fetchPayroll('', newCycle);
+  };
+
   const handleAjukan = async () => {
     const targetStatus = currentRole === 'owner' ? 'Disetujui' : 'Diperiksa';
+    const cycleLabel = activeCycle === 'kamis' ? 'Kelompok Kamis' : activeCycle === 'sabtu' ? 'Kelompok Sabtu' : 'Semua Kelompok';
     showLoading({
-      title: currentRole === 'owner' ? 'Menyetujui Payroll Mingguan...' : 'Mengajukan Payroll ke Owner...',
+      title: currentRole === 'owner' ? `Menyetujui Payroll (${cycleLabel})...` : `Mengajukan Payroll (${cycleLabel}) ke Owner...`,
       subtitle: 'Memvalidasi data upah dan memperbarui status di database...',
       type: 'production',
     });
@@ -81,6 +91,7 @@ export default function PayrollMingguanView({ currentRole }) {
         },
         body: JSON.stringify({
           status: targetStatus,
+          cycle: activeCycle,
           period: selectedPeriod || data?.period,
           start_date: data?.start_date,
           end_date: data?.end_date,
@@ -93,11 +104,11 @@ export default function PayrollMingguanView({ currentRole }) {
         showSuccess({
           title: currentRole === 'owner' ? 'Payroll Berhasil Disetujui' : 'Berhasil Diajukan ke Owner',
           subtitle: currentRole === 'owner' 
-            ? `Dana disetujui untuk dicairkan pada ${data?.payment_date || 'jadwal pembayaran'}.` 
-            : 'Pengajuan telah tercatat di sistem dan status berubah menjadi Menunggu Persetujuan Owner.',
+            ? `Dana (${cycleLabel}) disetujui untuk dicairkan pada ${data?.payment_date || 'jadwal pembayaran'}.` 
+            : `Pengajuan (${cycleLabel}) telah tercatat di sistem dan status berubah menjadi Menunggu Persetujuan Owner.`,
           duration: 1000,
           onComplete: () => {
-            fetchPayroll(selectedPeriod || data?.period);
+            fetchPayroll(selectedPeriod || data?.period, activeCycle);
           }
         });
       } else {
@@ -117,8 +128,9 @@ export default function PayrollMingguanView({ currentRole }) {
       return;
     }
 
+    const cycleLabel = activeCycle === 'kamis' ? 'Kelompok Kamis' : activeCycle === 'sabtu' ? 'Kelompok Sabtu' : 'Semua Kelompok';
     showLoading({
-      title: 'Mencairkan Pembayaran Upah...',
+      title: `Mencairkan Pembayaran Upah (${cycleLabel})...`,
       subtitle: 'Memperbarui status transaksi menjadi Dibayar dan mengunci histori...',
       type: 'production',
     });
@@ -132,6 +144,7 @@ export default function PayrollMingguanView({ currentRole }) {
         },
         body: JSON.stringify({
           status: 'Dibayar',
+          cycle: activeCycle,
           period: selectedPeriod || data?.period,
           start_date: data?.start_date,
           end_date: data?.end_date,
@@ -143,10 +156,10 @@ export default function PayrollMingguanView({ currentRole }) {
         setStatusOverride('Dibayar');
         showSuccess({
           title: 'Payroll Berhasil Dibayarkan',
-          subtitle: `Seluruh upah pekerja periode ${selectedPeriod || data?.period} telah ditandai Dibayar.`,
+          subtitle: `Seluruh upah pekerja ${cycleLabel} periode ${selectedPeriod || data?.period} telah ditandai Dibayar.`,
           duration: 1000,
           onComplete: () => {
-            fetchPayroll(selectedPeriod || data?.period);
+            fetchPayroll(selectedPeriod || data?.period, activeCycle);
           }
         });
       } else {
@@ -179,6 +192,7 @@ export default function PayrollMingguanView({ currentRole }) {
         },
         body: JSON.stringify({
           status: targetStatus,
+          cycle: activeCycle,
           period: selectedPeriod || data?.period,
           start_date: data?.start_date,
           end_date: data?.end_date,
@@ -192,7 +206,7 @@ export default function PayrollMingguanView({ currentRole }) {
           subtitle: `Payroll dikembalikan ke status ${targetStatus}.`,
           duration: 900,
           onComplete: () => {
-            fetchPayroll(selectedPeriod || data?.period);
+            fetchPayroll(selectedPeriod || data?.period, activeCycle);
           }
         });
       } else {
@@ -266,15 +280,17 @@ export default function PayrollMingguanView({ currentRole }) {
 
   // Direct Excel export
   const handleDirectExcelExport = () => {
+    const cycleLabel = activeCycle === 'kamis' ? 'Kelompok Kamis (Jahit, Potong, Overdek, Kansay)' : activeCycle === 'sabtu' ? 'Kelompok Sabtu (Finishing, QC, Packing)' : 'Semua Kelompok';
     exportToExcel({
-      filename: `Rekap_Payroll_Mingguan_${(selectedPeriod || data?.period || 'Mingguan').replace(/[\/\s:]/g, '_')}`,
+      filename: `Rekap_Payroll_Mingguan_${activeCycle}_${(selectedPeriod || data?.period || 'Mingguan').replace(/[\/\s:]/g, '_')}`,
       sheetName: 'Payroll Mingguan',
-      title: 'CV FASHOL MITSLI SEE — REKAP PENGGAJIAN PRODUKSI MINGGUAN',
+      title: `CV FASHOL MITSLI SEE — REKAP PENGGAJIAN PRODUKSI MINGGUAN (${cycleLabel.toUpperCase()})`,
       subtitle: `Periode: ${selectedPeriod || data?.period} | Tanggal Bayar: ${data?.payment_date || '-'}`,
       columns: [
         { header: 'No', key: 'no', align: 'center' },
         { header: 'No. Payroll', key: 'payroll_number' },
         { header: 'Nama Pekerja', key: 'worker_name' },
+        { header: 'Jadwal Payroll', key: 'payroll_day' },
         { header: 'Periode Kerja', key: 'period' },
         { header: 'Total Output (pcs)', key: 'qty', align: 'right' },
         { header: 'Total Upah Bersih (Rp)', key: 'total_wage', align: 'right' },
@@ -284,6 +300,7 @@ export default function PayrollMingguanView({ currentRole }) {
         no: idx + 1,
         payroll_number: item.payroll_number,
         worker_name: item.worker_name,
+        payroll_day: item.payroll_day || (activeCycle === 'sabtu' ? 'Sabtu' : 'Kamis'),
         period: item.period,
         qty: item.total_qty,
         total_wage: formatRupiah(item.total_wage),
@@ -305,7 +322,11 @@ export default function PayrollMingguanView({ currentRole }) {
             Penggajian Produksi (Mingguan)
           </h1>
           <p className="text-base text-slate-500 mt-1">
-            Rekap upah borongan periode Kamis–Rabu berdasarkan data Produksi Harian
+            {activeCycle === 'kamis' 
+              ? 'Rekap upah borongan Jahit, Potong, Overdek & Kansai (Cair hari Kamis)' 
+              : activeCycle === 'sabtu' 
+              ? 'Rekap upah borongan Finishing, QC Borongan, Lipat & OPP (Cair hari Sabtu)' 
+              : 'Rekap konsolidasi seluruh upah borongan produksi konveksi'}
           </p>
         </div>
 
@@ -398,6 +419,47 @@ export default function PayrollMingguanView({ currentRole }) {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Dual-Cycle Tab Selector */}
+      <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100 rounded-2xl border border-slate-200 shadow-xs">
+        <button
+          onClick={() => handleCycleChange('kamis')}
+          className={`flex-1 min-w-[200px] px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeCycle === 'kamis'
+              ? 'bg-white text-emerald-800 shadow-sm border border-emerald-200'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+          }`}
+        >
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Kelompok Kamis</span>
+          <span className="text-[11px] font-medium text-slate-400 hidden lg:inline">(Jahit, Potong, Overdek, Kansay)</span>
+        </button>
+
+        <button
+          onClick={() => handleCycleChange('sabtu')}
+          className={`flex-1 min-w-[200px] px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeCycle === 'sabtu'
+              ? 'bg-white text-blue-800 shadow-sm border border-blue-200'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+          }`}
+        >
+          <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+          <span>Kelompok Sabtu</span>
+          <span className="text-[11px] font-medium text-slate-400 hidden lg:inline">(QC, Rambuan, Lipat, OPP, dll)</span>
+        </button>
+
+        <button
+          onClick={() => handleCycleChange('all')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeCycle === 'all'
+              ? 'bg-white text-slate-900 shadow-sm border border-slate-300'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+          }`}
+        >
+          <Layers className="w-4 h-4 text-slate-500" />
+          <span>Semua (Konsolidasi)</span>
+        </button>
       </div>
 
       {/* Hero Stat Banner: Dark Slate with Green Accent */}
@@ -565,6 +627,7 @@ export default function PayrollMingguanView({ currentRole }) {
                 </th>
                 <th className="py-4 px-6">NO. PAYROLL</th>
                 <th className="py-4 px-6">NAMA PEKERJA</th>
+                <th className="py-4 px-6 text-center">JADWAL</th>
                 <th className="py-4 px-6">PERIODE KERJA</th>
                 <th className="py-4 px-6 text-right">TOTAL OUTPUT</th>
                 <th className="py-4 px-6 text-right">TOTAL UPAH</th>
@@ -575,7 +638,7 @@ export default function PayrollMingguanView({ currentRole }) {
             <tbody className="divide-y divide-slate-100 text-sm">
               {loading ? (
                 <tr>
-                  <td colSpan="8" className="py-12 text-center text-slate-400">
+                  <td colSpan="9" className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-7 h-7 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
                       <span>Memuat data payroll mingguan...</span>
@@ -584,8 +647,8 @@ export default function PayrollMingguanView({ currentRole }) {
                 </tr>
               ) : filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="py-12 text-center text-slate-400">
-                    Tidak ada data payroll yang sesuai dengan pencarian.
+                  <td colSpan="9" className="py-12 text-center text-slate-400">
+                    Tidak ada data payroll yang sesuai dengan pencarian atau filter kelompok.
                   </td>
                 </tr>
               ) : (
@@ -617,6 +680,15 @@ export default function PayrollMingguanView({ currentRole }) {
                           <div className="text-xs text-slate-400">Borongan Produksi</div>
                         </div>
                       </div>
+                    </td>
+                    <td className="py-4 px-6 text-center">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                        (item.payroll_day === 'Sabtu' || (!item.payroll_day && activeCycle === 'sabtu'))
+                          ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      }`}>
+                        {item.payroll_day || (activeCycle === 'sabtu' ? 'Sabtu' : 'Kamis')}
+                      </span>
                     </td>
                     <td className="py-4 px-6 text-slate-600">
                       {item.period}

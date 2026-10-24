@@ -51,6 +51,7 @@ class RealFactoryWorkersSeeder extends Seeder
         ];
 
         foreach ($standardProcesses as $p) {
+            $payrollDay = in_array($p['process_name'], ['Potong', 'Jahit', 'Overdek', 'Kansay']) ? 'Kamis' : 'Sabtu';
             ProductionProcess::updateOrCreate(
                 ['process_name' => $p['process_name']],
                 [
@@ -58,6 +59,7 @@ class RealFactoryWorkersSeeder extends Seeder
                     'description' => $p['description'],
                     'default_rate' => $p['default_rate'],
                     'unit' => $p['unit'],
+                    'payroll_day' => $payrollDay,
                     'is_active' => true,
                 ]
             );
@@ -146,16 +148,21 @@ class RealFactoryWorkersSeeder extends Seeder
                     continue;
                 }
 
+                $workerPayrollDay = in_array($d['process'], ['Potong', 'Jahit', 'Overdek', 'Kansay']) ? 'Kamis' : ($d['type'] === 'Produksi' ? 'Sabtu' : null);
+
                 $existing->update([
                     'name' => $d['name'],
                     'type' => $d['type'],
                     'process' => $d['process'],
                     'payment_system' => $d['pay'],
                     'default_salary' => $d['salary'],
+                    'payroll_day' => $workerPayrollDay,
                     'status' => $d['status'],
                     'notes' => $d['notes'],
                 ]);
             } else {
+                $workerPayrollDay = in_array($d['process'], ['Potong', 'Jahit', 'Overdek', 'Kansay']) ? 'Kamis' : ($d['type'] === 'Produksi' ? 'Sabtu' : null);
+
                 Worker::create([
                     'worker_code' => $d['code'],
                     'name' => $d['name'],
@@ -163,6 +170,7 @@ class RealFactoryWorkersSeeder extends Seeder
                     'process' => $d['process'],
                     'payment_system' => $d['pay'],
                     'default_salary' => $d['salary'],
+                    'payroll_day' => $workerPayrollDay,
                     'status' => $d['status'],
                     'notes' => $d['notes'],
                 ]);
